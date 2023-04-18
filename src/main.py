@@ -130,6 +130,7 @@ if __name__ == '__main__':
 
         sys.exit(check())
 
+
     errors = variables.check_all_required_variables()
     variables.raise_from_errors(errors)
     main(module)

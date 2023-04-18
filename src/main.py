@@ -122,6 +122,7 @@ if __name__ == '__main__':
         msg = f'Last arg should be one of {[str(item) for item in OracleModule]}, received {module_name}.'
         logger.error({'msg': msg})
         raise ValueError(msg)
+
     module = OracleModule(module_name)
     if module == OracleModule.CHECK:
         errors = variables.check_uri_required_variables()

@@ -18,9 +18,9 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     logging.info('Getting previously reported numbers (will be fetched from events)...')
     genesis_time = beacon_spec[3]
     result = PoolMetrics()
-    # 通过abi调用pool合约
+    # 通过abi调用pool合约 todo
     result.depositedValidators, result.beaconValidators, result.beaconBalance = pool.functions.getBeaconStat().call()
-    # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
+    # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商) todo
     result.bufferedBalance = pool.functions.getBufferedEther().call()
 
     # Calculate the earliest block to limit scanning depth 计算最早的块以限制扫描深度
@@ -77,20 +77,22 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
         potentially_reportable_epoch, (finalized_epoch_beacon // epochs_per_frame) * epochs_per_frame
     )
     partial_metrics.timestamp = get_timestamp_by_epoch(beacon_spec, partial_metrics.epoch)
+    # todo
     partial_metrics.depositedValidators = pool.functions.getBeaconStat().call()[0]
     partial_metrics.bufferedBalance = pool.functions.getBufferedEther().call()
     return partial_metrics
 
 
 def get_full_current_metrics(
-    w3: Web3, pool, beacon, beacon_spec, partial_metrics, rewards_vault_address
+    w3: Web3, pool, registry, beacon, beacon_spec, partial_metrics, rewards_vault_address
 ) -> PoolMetrics:
     """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
     slots_per_epoch = beacon_spec[1]
     slot = partial_metrics.epoch * slots_per_epoch
     logging.info(f'Reportable state: epoch:{partial_metrics.epoch} slot:{slot}')
     # todo 获取注册的验证者的key 通过abi获取
-    validators_keys = get_validators_keys(w3)
+    validators_keys = registry.functions.getNodeValidators(0, 0).call()[1]
+    logging.info(f'Total validator keys detail: {validators_keys}')
     logging.info(f'Total validator keys in registry: {len(validators_keys)}')
     full_metrics = partial_metrics
     # 根据验证者的key在信标链中计算信标余额，信标验证器，活跃的验证者余额

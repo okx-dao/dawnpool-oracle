@@ -55,9 +55,9 @@ if missing:
     exit(1)
 
 ARTIFACTS_DIR = './assets'
-ORACLE_ARTIFACT_FILE = 'LidoOracle.json'
+ORACLE_ARTIFACT_FILE = 'DawnPoolOracle.json'
 POOL_ARTIFACT_FILE = 'Lido.json'
-REGISTRY_ARTIFACT_FILE = 'NodeOperatorsRegistry.json'
+REGISTRY_ARTIFACT_FILE = 'DepositNodeManager.json'
 
 
 DEFAULT_SLEEP = 60
@@ -78,6 +78,15 @@ beacon_provider = os.environ['BEACON_NODE']
 pool_address = os.environ['POOL_CONTRACT']
 if not Web3.isChecksumAddress(pool_address):
     pool_address = Web3.toChecksumAddress(pool_address)
+
+oracle_address = os.environ['ORACLE_CONTRACT']
+if not Web3.isChecksumAddress(oracle_address):
+    oracle_address = Web3.toChecksumAddress(oracle_address)
+
+node_manager_address = os.environ['NODE_MANAGER_CONTRACT']
+if not Web3.isChecksumAddress(node_manager_address):
+    node_manager_address = Web3.toChecksumAddress(node_manager_address)
+
 
 # 获取合约abi路径
 oracle_abi_path = os.path.join(ARTIFACTS_DIR, ORACLE_ARTIFACT_FILE)
@@ -137,22 +146,30 @@ with open(pool_abi_path, 'r') as file:
 abi = json.loads(a)
 pool = w3.eth.contract(abi=abi['abi'], address=pool_address)  # contract object
 # Get Oracle contract
-oracle_address = pool.functions.getOracle().call()  # oracle contract
-logger.info(f'{oracle_address=}')
+# oracle_address = pool.functions.getOracle().call()  # oracle contract
+# logger.info(f'{oracle_address=}')
 
 with open(oracle_abi_path, 'r') as file:
     a = file.read()
 abi = json.loads(a)
 oracle = w3.eth.contract(abi=abi['abi'], address=oracle_address)
 
-# Get Registry contract
-registry_address = pool.functions.getOperators().call()
-logger.info(f'{registry_address=}')
-
 with open(registry_abi_path, 'r') as file:
     a = file.read()
 abi = json.loads(a)
-registry = w3.eth.contract(abi=abi['abi'], address=registry_address)
+registry = w3.eth.contract(abi=abi['abi'], address=node_manager_address)
+
+
+
+
+# Get Registry contract
+# registry_address = pool.functions.getOperators().call()
+# logger.info(f'{registry_address=}')
+#
+# with open(registry_abi_path, 'r') as file:
+#     a = file.read()
+# abi = json.loads(a)
+# registry = w3.eth.contract(abi=abi['abi'], address=registry_address)
 
 
 # Get Beacon specs from contract 查询了当前区块链上的信标链规范数据
@@ -186,7 +203,7 @@ logging.info(f'POOL_CONTRACT={pool_address}')
 
 
 logging.info(f'Oracle contract address: {oracle_address} (auto-discovered)')
-logging.info(f'Registry contract address: {registry_address} (auto-discovered)')
+logging.info(f'Registry contract address: {node_manager_address} (auto-discovered)')
 logging.info(f'Seconds per slot: {seconds_per_slot} (auto-discovered)')
 logging.info(f'Slots per epoch: {slots_per_epoch} (auto-discovered)')
 logging.info(f'Epochs per frame: {epochs_per_frame} (auto-discovered)')
@@ -335,7 +352,7 @@ def update_beacon_data():
 
     # Get full metrics using polling (get keys from registry, get balances from beacon)
     current_metrics = get_full_current_metrics(
-        w3, pool, beacon, beacon_spec, current_metrics, rewards_vault_address
+        w3, pool, registry, beacon, beacon_spec, current_metrics, rewards_vault_address
     )
     metrics_exporter_state.set_current_pool_metrics(current_metrics)
     # 对比

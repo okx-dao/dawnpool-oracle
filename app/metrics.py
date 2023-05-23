@@ -112,9 +112,9 @@ def get_full_current_metrics(
     #  查询奖励库的地址当前时间对应账户在指定区块高度时的余额
     full_metrics.rewardsVaultBalance = w3.eth.get_balance(
         w3.toChecksumAddress(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
-        block_identifier=result.blockNumber
+        block_identifier=block_number
     )
-
+    logging.info(f'DawnPool the balance of the reward pool address : {full_metrics.rewardsVaultBalance}')
     # todo 暂时未考虑取款情况(通过合约获取提款凭证对应的地址, 查询提款地址在指定区块高度时的余额)
 
     logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')

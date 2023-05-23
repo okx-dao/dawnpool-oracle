@@ -31,16 +31,11 @@ logger = logging.getLogger()
 
 meta_envs = ['VERSION', 'COMMIT_MESSAGE', 'COMMIT_HASH', 'COMMIT_DATETIME', 'BUILD_DATETIME', 'TAGS', 'BRANCH']
 
-for env in meta_envs:
-    value = 'Not set'
-    if env in os.environ and os.environ[env] != '':
-        value = os.environ[env]
-    logging.info(f'{env.lower()}: {value}')
-
 envs = [
     'WEB3_PROVIDER_URI',
     'BEACON_NODE',
     'POOL_CONTRACT',
+    'REWARDS_VAULT_ADDRESS',
 ]
 if os.getenv('FORCE'):
     logging.error(
@@ -63,16 +58,20 @@ ARTIFACTS_DIR = './assets'
 ORACLE_ARTIFACT_FILE = 'LidoOracle.json'
 POOL_ARTIFACT_FILE = 'Lido.json'
 REGISTRY_ARTIFACT_FILE = 'NodeOperatorsRegistry.json'
-STETH_CURVE_POOL_FILE = 'StableSwapPool.json'
-STETH_PRICE_ORACLE_FILE = 'StableSwapStateOracle.json'
+
 
 DEFAULT_SLEEP = 60
 DEFAULT_COUNTDOWN_SLEEP = 10
 DEFAULT_GAS_LIMIT = 1_500_000
 
+
 prometheus_metrics_port = int(os.getenv('PROMETHEUS_METRICS_PORT', 8000))
 
-steth_price_oracle_block_number_shift = int(os.getenv('STETH_PRICE_ORACLE_BLOCK_NUMBER_SHIFT', 15))
+# 奖励库的地址
+rewards_vault_address = os.environ['REWARDS_VAULT_ADDRESS']
+if not Web3.isChecksumAddress(rewards_vault_address):
+    rewards_vault_address = Web3.toChecksumAddress(rewards_vault_address)
+
 eth1_provider = os.environ['WEB3_PROVIDER_URI']
 beacon_provider = os.environ['BEACON_NODE']
 
@@ -80,19 +79,11 @@ pool_address = os.environ['POOL_CONTRACT']
 if not Web3.isChecksumAddress(pool_address):
     pool_address = Web3.toChecksumAddress(pool_address)
 
-steth_curve_pool_address = os.environ.get('STETH_CURVE_POOL_CONTRACT')
-if steth_curve_pool_address and not Web3.isChecksumAddress(steth_curve_pool_address):
-    steth_curve_pool_address = Web3.toChecksumAddress(steth_curve_pool_address)
-
-steth_price_oracle_address = os.environ.get('STETH_PRICE_ORACLE_CONTRACT')
-if steth_price_oracle_address and not Web3.isChecksumAddress(steth_price_oracle_address):
-    steth_price_oracle_address = Web3.toChecksumAddress(steth_price_oracle_address)
-
+# 获取合约abi路径
 oracle_abi_path = os.path.join(ARTIFACTS_DIR, ORACLE_ARTIFACT_FILE)
 pool_abi_path = os.path.join(ARTIFACTS_DIR, POOL_ARTIFACT_FILE)
 registry_abi_path = os.path.join(ARTIFACTS_DIR, REGISTRY_ARTIFACT_FILE)
-steth_curve_pool_abi_path = os.path.join(ARTIFACTS_DIR, STETH_CURVE_POOL_FILE)
-steth_price_oracle_abi_path = os.path.join(ARTIFACTS_DIR, STETH_PRICE_ORACLE_FILE)
+
 member_privkey = os.getenv('MEMBER_PRIV_KEY')
 SLEEP = int(os.getenv('SLEEP', DEFAULT_SLEEP))
 COUNTDOWN_SLEEP = int(os.getenv('COUNTDOWN_SLEEP', DEFAULT_COUNTDOWN_SLEEP))
@@ -100,12 +91,14 @@ COUNTDOWN_SLEEP = int(os.getenv('COUNTDOWN_SLEEP', DEFAULT_COUNTDOWN_SLEEP))
 run_as_daemon = int(os.getenv('DAEMON', 0))
 force = int(os.getenv('FORCE_DO_NOT_USE_IN_PRODUCTION', 0))
 
+# 用户私钥
 dry_run = member_privkey is None
 
 GAS_LIMIT = int(os.getenv('GAS_LIMIT', DEFAULT_GAS_LIMIT))
 
+# 数据块的块号
 ORACLE_FROM_BLOCK = int(os.getenv('ORACLE_FROM_BLOCK', 0))
-
+#  指定一个epoch作为提款请求的启示点 在这个epoch之前，如果还有其他的验证节点需要提款处理，则这些提款请求也将被考虑在内。如果没有指定该参数，则默认从当前epoch开始处理验证节点的提款请求。 todo
 consider_withdrawals_from_epoch = os.environ.get('CONSIDER_WITHDRAWALS_FROM_EPOCH')
 
 provider = MultiProvider(eth1_provider.split(','))
@@ -119,7 +112,7 @@ if not w3.isConnected():
 networks = {
     1: {'name': 'Mainnet', 'engine': 'PoW'},
     5: {'name': 'Goerli', 'engine': 'PoA'},
-    1337: {'name': 'E2E', 'engine': 'PoA'},
+    # 1337: {'name': 'E2E', 'engine': 'PoA'},
 }
 
 network_id = w3.eth.chain_id
@@ -161,55 +154,37 @@ with open(registry_abi_path, 'r') as file:
 abi = json.loads(a)
 registry = w3.eth.contract(abi=abi['abi'], address=registry_address)
 
-# Get StETHCurvePool contract
-steth_curve_pool = None
-if steth_curve_pool_address:
-    with open(steth_curve_pool_abi_path, 'r') as file:
-        a = file.read()
-    abi = json.loads(a)
-    steth_curve_pool = w3.eth.contract(abi=abi, address=steth_curve_pool_address)
 
-# Get StETHPriceOracle contract
-steth_price_oracle = None
-if steth_price_oracle_address:
-    with open(steth_price_oracle_abi_path, 'r') as file:
-        a = file.read()
-    abi = json.loads(a)
-    steth_price_oracle = w3.eth.contract(abi=abi, address=steth_price_oracle_address)
-
-# Get Beacon specs from contract
+# Get Beacon specs from contract 查询了当前区块链上的信标链规范数据
 beacon_spec = oracle.functions.getBeaconSpec().call()
+# 每个信标链帧（Beacon Chain Frame）中包含的epochs: 64个epochs todo 每一帧包含的epochs在oracle中定义 225个
 epochs_per_frame = beacon_spec[0]
+# 每个epoch的插槽数: 32个slot
 slots_per_epoch = beacon_spec[1]
+# 每个槽位的时间长度：12秒（Seconds Per Slot）
 seconds_per_slot = beacon_spec[2]
+# 信标链的创世纪时间戳: 1438269973，对应的日期时间为 2015 年 7 月 30 日 14:26:13 UTC
 genesis_time = beacon_spec[3]
 
 beacon = BeaconChainClient(beacon_provider, slots_per_epoch)
 
 if run_as_daemon:
+    # 以守护进程模式运行（无限循环）
     logging.info('DAEMON=1 Running in daemon mode (in endless loop).')
 else:
+    # 单次迭代模式运行（报完会退出）
     logging.info('DAEMON=0 Running in single iteration mode (will exit after reporting).')
 
 if force:
     logging.info('FORCE_DO_NOT_USE_IN_PRODUCTION=1 Running in enforced mode.')
+    # 在强制模式下，TX 总是被发送，即使它看起来可疑。 切勿在生产中使用它！
     logging.warning("In enforced mode TX gets always sent even if it looks suspicious. NEVER use it in production!")
 
 logging.info(f'SLEEP={SLEEP} s (pause between iterations in DAEMON mode)')
 logging.info(f'GAS_LIMIT={GAS_LIMIT} gas units')
 logging.info(f'POOL_CONTRACT={pool_address}')
 
-if steth_curve_pool_address:
-    logging.info(f'STETH_CURVE_POOL_CONTRACT={steth_curve_pool_address}')
-else:
-    logging.info('STETH_CURVE_POOL_CONTRACT was not provided. Price oracle is disabled')
 
-if steth_price_oracle_address:
-    logging.info(f'STETH_PRICE_ORACLE_CONTRACT={steth_price_oracle_address}')
-else:
-    logging.info('STETH_PRICE_ORACLE_CONTRACT was not provided. Price oracle is disabled')
-
-logging.info(f'STETH_PRICE_ORACLE_BLOCK_NUMBER_SHIFT={steth_price_oracle_block_number_shift}')
 logging.info(f'Oracle contract address: {oracle_address} (auto-discovered)')
 logging.info(f'Registry contract address: {registry_address} (auto-discovered)')
 logging.info(f'Seconds per slot: {seconds_per_slot} (auto-discovered)')
@@ -218,9 +193,9 @@ logging.info(f'Epochs per frame: {epochs_per_frame} (auto-discovered)')
 logging.info(f'Genesis time: {genesis_time} (auto-discovered)')
 
 
-def build_report_beacon_tx(epoch, balance, validators):  # hash tx
+def build_report_beacon_tx(epoch, balance, validators, rewardsBalance):  # hash tx
     max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
-    return oracle.functions.reportBeacon(epoch, balance // 10**9, validators).buildTransaction(
+    return oracle.functions.reportBeacon(epoch, balance // 10**9, validators, rewardsBalance).buildTransaction(
         {
             'from': account.address,
             'gas': GAS_LIMIT,
@@ -317,8 +292,6 @@ def main():
 
 def run_once():
     update_beacon_data()
-    if steth_price_oracle and steth_curve_pool:
-        update_steth_price_oracle_data()
 
     if not run_as_daemon:
         logging.info('We are in single-iteration mode, so exiting. Set DAEMON=1 env to run in the loop.')
@@ -327,32 +300,9 @@ def run_once():
     logging.info(f'We are in DAEMON mode. Sleep {SLEEP} s and continue')
 
 
-def is_current_member_in_todays_quorum():
-    """
-    Shuffle oracle reports. It will be easier to check that oracle is ok (working)
-    """
-    quorum_size = oracle.functions.getQuorum().call()
-    oracle_members = oracle.functions.getOracleMembers().call()
-
-    if dry_run or not account:
-        return True
-
-    try:
-        oracle_holder_index = oracle_members.index(account.address)
-    except ValueError:
-        logger.warning('Account is not oracle member.')
-        return True
-
-    current_date = datetime.datetime.today().date().day
-    # Oracles list that should report today
-    quorum_today = [(current_date + x) % len(oracle_members) for x in range(quorum_size)]
-
-    return oracle_holder_index in quorum_today
-
-
 def update_beacon_data():
-    # Get previously reported data
-    prev_metrics = get_previous_metrics(w3, pool, oracle, beacon_spec, ORACLE_FROM_BLOCK)
+    # Get previously reported data 获取之前上报的数据
+    prev_metrics = get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, ORACLE_FROM_BLOCK)
     metrics_exporter_state.set_prev_pool_metrics(prev_metrics)
     if prev_metrics:
         logging.info(f'Previously reported epoch: {prev_metrics.epoch}')
@@ -365,39 +315,42 @@ def update_beacon_data():
         logging.info(f'Previous validator metrics: depositedValidators:{prev_metrics.depositedValidators}')
         logging.info(f'Previous validator metrics: transientValidators:{prev_metrics.getTransientValidators()}')
         logging.info(f'Previous validator metrics: beaconValidators:{prev_metrics.beaconValidators}')
+        logging.info(f'Previous validator metrics: rewardsVaultBalance:{prev_metrics.rewardsVaultBalance}')
         logging.info(
             f'Timestamp of previous report: {datetime.datetime.fromtimestamp(prev_metrics.timestamp)} or {prev_metrics.timestamp}'
         )
 
-    # Get minimal metrics that are available without polling
+    # Get minimal metrics that are available without polling 获取当前信标链的性能度量（Metrics）
     current_metrics = get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec)
     metrics_exporter_state.set_current_pool_metrics(current_metrics)
 
-    if current_metrics.epoch <= prev_metrics.epoch:  # commit happens once per day
+    logging.info(
+        f'Currently Metrics epoch: {current_metrics.epoch} Prev Metrics epoch {prev_metrics.epoch} '
+    )
+
+    # 一天225个epoch 如果当前epoch <= 上次提交的epoch加一天 说明一天内已经提交过 不提交 todo 实际跑下数据验证
+    if current_metrics.epoch <= (prev_metrics.epoch + 225):  # commit happens once per day
         logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
         return
 
     # Get full metrics using polling (get keys from registry, get balances from beacon)
     current_metrics = get_full_current_metrics(
-        w3, pool, beacon, beacon_spec, current_metrics, consider_withdrawals_from_epoch
+        w3, pool, beacon, beacon_spec, current_metrics, rewards_vault_address
     )
     metrics_exporter_state.set_current_pool_metrics(current_metrics)
+    # 对比
     warnings = compare_pool_metrics(prev_metrics, current_metrics)
 
     logging.info(
         f'Tx call data: oracle.reportBeacon({current_metrics.epoch}, {current_metrics.beaconBalance}, {current_metrics.beaconValidators})'
     )
+    # 上报数据
     if not dry_run:
-
-        if not is_current_member_in_todays_quorum():
-            logger.info('Sleep for 8 minutes before sending report.')
-            time.sleep(8 * 60)
 
         try:
             metrics_exporter_state.reportableFrame.set(True)
             tx = build_report_beacon_tx(
-                current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators
-            )
+                current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators,current_metrics.rewardsVaultBalance)
             # Create the tx and execute it locally to check validity
             w3.eth.call(tx)
             logging.info('Calling tx locally succeeded.')
@@ -458,68 +411,6 @@ def update_beacon_data():
         logging.info('Provide MEMBER_PRIV_KEY to be able to transact')
 
 
-def update_steth_price_oracle_data():
-    logging.info('Check StETH Price Oracle state')
-    try:
-        block_number = w3.eth.getBlock('latest').number - steth_price_oracle_block_number_shift
-        oracle_price = steth_price_oracle.functions.stethPrice().call()
-        pool_price = steth_curve_pool.functions.get_dy(1, 0, 10**18).call(block_identifier=block_number)
-        percentage_diff = 100 * abs(1 - oracle_price / pool_price)
-        logging.info(
-            f'StETH stats: (pool price - {pool_price / 1e18:.6f}, oracle price - {oracle_price / 1e18:.6f}, difference - {percentage_diff:.2f}%)'
-        )
-
-        metrics_exporter_state.set_steth_pool_metrics(oracle_price, pool_price)
-
-        proof_params = steth_price_oracle.functions.getProofParams().call()
-
-        # proof_params[-1] contains priceUpdateThreshold value in basis points: 10000 BP equal to 100%, 100 BP to 1%.
-        price_update_threshold = proof_params[-1] / 100
-        is_state_actual = percentage_diff < price_update_threshold
-
-        if is_state_actual:
-            logging.info(
-                f'StETH Price Oracle state valid (prices difference < {price_update_threshold:.2f}%). No update required.'
-            )
-            return
-
-        if dry_run:
-            logging.warning("Running in dry run mode. New state will not be submitted.")
-            return
-
-        logging.info(
-            f'StETH Price Oracle state outdated (prices difference >= {price_update_threshold:.2f}%). Submiting new one...'
-        )
-
-        header_blob, proofs_blob = encode_proof_data(provider, block_number, proof_params)
-
-        max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
-        tx = steth_price_oracle.functions.submitState(header_blob, proofs_blob).buildTransaction(
-            {
-                'gas': 2_000_000,
-                'maxFeePerGas': max_fee_per_gas,
-                'maxPriorityFeePerGas': max_priority_fee_per_gas,
-            }
-        )
-
-        w3.eth.call(tx)
-        logging.info('Calling tx locally succeeded.')
-        sign_and_send_tx(tx)
-    except SolidityError as sl:
-        metrics_exporter_state.exceptionsCount.inc()
-        logging.error(f'Tx call failed : {sl}')
-    except ValueError as exc:
-        (args,) = exc.args
-        if isinstance(args, dict) and args["code"] == -32000:
-            raise
-        else:
-            metrics_exporter_state.exceptionsCount.inc()
-            logging.exception(exc)
-    except TimeExhausted:
-        raise
-    except Exception as exc:
-        metrics_exporter_state.exceptionsCount.inc()
-        logging.exception(f'Unexpected exception. {type(exc)}')
 
 
 def sleep():

@@ -17,7 +17,7 @@ from exceptions import BeaconConnectionTimeoutException
 
 
 DEFAULT_TIMEOUT = 60
-LONG_TIMEOUT = 60 * 20
+LONG_TIMEOUT = 60 * 40
 
 
 retry_strategy = Retry(

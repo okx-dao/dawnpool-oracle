@@ -1,52 +1,80 @@
-FROM python:3.11-slim as base
+FROM python:3.9.14-slim-bullseye as base
 
-RUN apt-get update && apt-get install -y --no-install-recommends -qq \
-    gcc=4:10.2.1-1 \
-    libffi-dev=3.3-6 \
-    g++=4:10.2.1-1 \
-    git=1:2.30.2-1 \
-    curl=7.74.0-1.3+deb11u7 \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+ENV LANG=C.UTF-8 \
+    DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+RUN sed -i "s@http://\(deb\|security\).debian.org@https://mirrors.aliyun.com@g" /etc/apt/sources.list
+RUN apt-get update \
+    && apt-get install -y wget net-tools curl git gcc libffi-dev g++ \
+    && curl --version \
+    && git --version \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_NO_INTERACTION=1 \
-    VENV_PATH="/.venv"
-
-ENV PATH="$VENV_PATH/bin:$PATH"
+WORKDIR /app
 
 FROM base as builder
 
-ENV POETRY_VERSION=1.3.2
-RUN pip install --no-cache-dir poetry==$POETRY_VERSION
+ENV POETRY_VERSION=1.4.2 \
+    POETRY_HOME="/opt/poetry"
 
-WORKDIR /
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN cd /home && wget https://github.com/python-poetry/poetry/releases/download/1.4.2/poetry-1.4.2-py3-none-any.whl \
+    && /usr/local/bin/python -m pip install --upgrade pip && pip install wheel && pip --default-timeout=6000 install -i https://mirrors.aliyun.com/pypi/simple ./poetry-1.4.2-py3-none-any.whl
+ENV PATH="$POETRY_HOME/bin:$PATH"
+
 COPY pyproject.toml poetry.lock ./
-RUN poetry install --only main --no-root
+RUN python -m venv --copies /venv
 
+RUN . /venv/bin/activate && poetry install
 
 FROM base as production
 
-COPY --from=builder $VENV_PATH $VENV_PATH
-WORKDIR /app
-COPY . .
+COPY --from=builder /venv /venv
 
-RUN apt-get clean && find /var/lib/apt/lists/ -type f -delete && chown -R www-data /app/
+RUN mkdir -p /var/www && chown www-data /var/www && \
+    chown -R www-data /app/ && chown -R www-data /venv
 
-ENV PROMETHEUS_PORT 9000
-ENV HEALTHCHECK_SERVER_PORT 9010
+ENV PYTHONPATH="/venv/lib/python3.9/site-packages/"
+ENV PATH=$PATH:/venv/bin
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV PULSE_SERVER_PORT 8000
+ENV PROMETHEUS_PORT 8000
+
+# Set metadata
+ARG VERSION
+ARG COMMIT_DATETIME
+ARG BUILD_DATETIME
+ARG TAGS
+ARG BRANCH
+ARG COMMIT_MESSAGE
+ARG COMMIT_HASH
+LABEL VERSION="$VERSION"
+LABEL COMMIT_DATETIME="$COMMIT_DATETIME"
+LABEL BUILD_DATETIME="$BUILD_DATETIME"
+LABEL TAGS="$TAGS"
+LABEL BRANCH="$BRANCH"
+LABEL COMMIT_MESSAGE="$COMMIT_MESSAGE"
+LABEL COMMIT_HASH="$COMMIT_HASH"
+ENV VERSION=${VERSION}
+ENV COMMIT_DATETIME=${COMMIT_DATETIME}
+ENV BUILD_DATETIME=${BUILD_DATETIME}
+ENV TAGS=${TAGS}
+ENV BRANCH=${BRANCH}
+ENV COMMIT_MESSAGE=${COMMIT_MESSAGE}
+ENV COMMIT_HASH=${COMMIT_HASH}
 
 EXPOSE $PROMETHEUS_PORT
 USER www-data
 
+COPY --from=builder /usr/local/ /usr/local/
+COPY assets ./assets
+COPY app ./
+
 HEALTHCHECK --interval=10s --timeout=3s \
-    CMD curl -f http://localhost:$HEALTHCHECK_SERVER_PORT/healthcheck || exit 1
+    CMD curl -f http://localhost:$PULSE_SERVER_PORT/healthcheck || exit 1
 
-WORKDIR /app/
-
-ENTRYPOINT ["python3", "-m", "src.main"]
+ENTRYPOINT ["python3", "-u", "oracle.py"]

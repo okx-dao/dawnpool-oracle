@@ -111,6 +111,8 @@ class BeaconChainClient:
     @proxy_connect_timeout_exception
     def get_balances(self, slot, keys_list) -> Tuple[int, int, int]:
         all_validators = self._fetch_balances(slot)
+        #  拉取时间太长 先过滤测试
+        # all_validators = []
         logging.info(f'Validator balances on beacon for slot: {slot}')
 
         validator_pub_keys = self._from_bytes_to_pub_keys(keys_list)
@@ -118,6 +120,7 @@ class BeaconChainClient:
         validators_count = 0
         total_balance = 0
         active_validators_balance = 0
+        exited_validators_count = 0
 
         for validator in all_validators:
             if validator['validator']['pubkey'] in validator_pub_keys:
@@ -126,12 +129,14 @@ class BeaconChainClient:
 
                 if validator['status'] in [ValidatorStatus.ACTIVE, ValidatorStatus.ACTIVE_ONGOING]:
                     active_validators_balance += int(validator['balance'])
+                if validator['status'] in [ValidatorStatus.EXITED]:
+                    exited_validators_count += 1
 
         # Convert Gwei to wei
         total_balance *= 10**9
         active_validators_balance *= 10**9
 
-        return total_balance, validators_count, active_validators_balance
+        return total_balance, validators_count, active_validators_balance, exited_validators_count
 
     @staticmethod
     def _from_bytes_to_pub_keys(keys_list):

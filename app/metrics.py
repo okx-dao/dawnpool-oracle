@@ -18,24 +18,28 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     logging.info('Getting previously reported numbers (will be fetched from events)...')
     genesis_time = beacon_spec[3]
     result = PoolMetrics()
-    # 通过abi调用pool合约 todo
+    # 通过abi调用pool合约
     result.depositedValidators, result.beaconValidators, result.beaconBalance = pool.functions.getBeaconStat().call()
-    # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商) todo
+    # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
     result.bufferedBalance = pool.functions.getBufferedEther().call()
-
     # Calculate the earliest block to limit scanning depth 计算最早的块以限制扫描深度
     # 每个 ETH1 块的秒数 正常12s 出一个块 设置14s为了遍历 todo
     SECONDS_PER_ETH1_BLOCK = 14
     latest_block = w3.eth.getBlock('latest')
     from_block = max(from_block, int((latest_block['timestamp'] - genesis_time) / SECONDS_PER_ETH1_BLOCK))
-    step = 1000
+
+    latest_num = latest_block['number']
+    # todo
+    logging.info(f'DawnPool from_block : {from_block}, latest_num : {latest_num}')
     # Try to fetch and parse last 'Completed' event from the contract. 遍历从合约中获取并解析最后一个“已完成”事件。
+    step = 1000
     for end in range(latest_block['number'], from_block, -step):
         start = max(end - step + 1, from_block)
         # 调用了 getLogs 方法来读取区块链上合约中 Completed 事件在指定区块高度范围内的日志,日志会被存储在 events 变量中
         events = oracle.events.Completed.getLogs(fromBlock=start, toBlock=end)
         # 判断 events 是否为空 如果存在符合条件的事件日志，获取最后一个事件，即 events[-1]，并从中提取出相应的信息
         if events:
+            logging.info(f'DawnPool events : {events}')
             event = events[-1]
             result.epoch = event['args']['epochId']
             result.blockNumber = event.blockNumber
@@ -46,7 +50,7 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
         w3.toChecksumAddress(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
         block_identifier=result.blockNumber
     )
-
+    logging.info(f'DawnPool result : {result}')
     # If the epoch has been assigned from the last event (not the first run) 如果纪元是从最后一个事件（不是第一次运行）分配的
     if result.epoch:
         result.timestamp = get_timestamp_by_epoch(beacon_spec, result.epoch)
@@ -80,6 +84,7 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
     # todo
     partial_metrics.depositedValidators = pool.functions.getBeaconStat().call()[0]
     partial_metrics.bufferedBalance = pool.functions.getBufferedEther().call()
+    logging.info(f'Last partial_metrics: {partial_metrics} ')
     return partial_metrics
 
 
@@ -88,8 +93,9 @@ def get_full_current_metrics(
 ) -> PoolMetrics:
     """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
     slots_per_epoch = beacon_spec[1]
+    logging.info(f'Reportable slots_per_epoch: {slots_per_epoch} ,partial_metrics.epoch: {partial_metrics.epoch}')
     slot = partial_metrics.epoch * slots_per_epoch
-    logging.info(f'Reportable state: epoch:{partial_metrics.epoch} slot:{slot}')
+    logging.info(f'Reportable state, epoch:{partial_metrics.epoch} slot:{slot}')
     # todo 获取注册的验证者的key 通过abi获取
     validators_keys = registry.functions.getNodeValidators(0, 0).call()[1]
     logging.info(f'Total validator keys detail: {validators_keys}')
@@ -101,6 +107,7 @@ def get_full_current_metrics(
         full_metrics.beaconBalance,
         full_metrics.beaconValidators,
         full_metrics.activeValidatorBalance,
+        full_metrics.exitedValidatorsCount,
     ) = beacon.get_balances(slot, validators_keys)
 
     logging.info(
@@ -109,6 +116,7 @@ def get_full_current_metrics(
     )
 
     block_number = beacon.get_block_by_beacon_slot(slot)
+    logging.info(f'Validator block_number: {block_number}')
     #  查询奖励库的地址当前时间对应账户在指定区块高度时的余额
     full_metrics.rewardsVaultBalance = w3.eth.get_balance(
         w3.toChecksumAddress(rewards_vault_address.replace('0x010000000000000000000000', '0x')),

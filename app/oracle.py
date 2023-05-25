@@ -56,7 +56,7 @@ if missing:
 
 ARTIFACTS_DIR = './assets'
 ORACLE_ARTIFACT_FILE = 'DawnPoolOracle.json'
-POOL_ARTIFACT_FILE = 'Lido.json'
+POOL_ARTIFACT_FILE = 'DawnDeposit.json'
 REGISTRY_ARTIFACT_FILE = 'DepositNodeManager.json'
 
 
@@ -180,7 +180,7 @@ epochs_per_frame = beacon_spec[0]
 slots_per_epoch = beacon_spec[1]
 # 每个槽位的时间长度：12秒（Seconds Per Slot）
 seconds_per_slot = beacon_spec[2]
-# 信标链的创世纪时间戳: 1438269973，对应的日期时间为 2015 年 7 月 30 日 14:26:13 UTC
+# 以太坊创世纪时间戳: 1438269973，对应的日期时间为 2015 年 7 月 30 日 14:26:13 UTC todo Goerli 测试网的 genesis time 值为：1554135429，对应的日期时间为 2019 年 4 月 1 日 12:43:49 UTC
 genesis_time = beacon_spec[3]
 
 beacon = BeaconChainClient(beacon_provider, slots_per_epoch)
@@ -210,9 +210,9 @@ logging.info(f'Epochs per frame: {epochs_per_frame} (auto-discovered)')
 logging.info(f'Genesis time: {genesis_time} (auto-discovered)')
 
 
-def build_report_beacon_tx(epoch, balance, validators, rewardsBalance):  # hash tx
+def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount):  # hash tx
     max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
-    return oracle.functions.reportBeacon(epoch, balance // 10**9, validators, rewardsBalance).buildTransaction(
+    return oracle.functions.reportBeacon(epoch, balance // 10**9, validators, rewardsBalance, exitedValidatorsCount).buildTransaction(
         {
             'from': account.address,
             'gas': GAS_LIMIT,
@@ -345,10 +345,10 @@ def update_beacon_data():
         f'Currently Metrics epoch: {current_metrics.epoch} Prev Metrics epoch {prev_metrics.epoch} '
     )
 
-    # 一天225个epoch 如果当前epoch <= 上次提交的epoch加一天 说明一天内已经提交过 不提交 todo 实际跑下数据验证
-    if current_metrics.epoch <= (prev_metrics.epoch + 225):  # commit happens once per day
-        logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
-        return
+    # 一天225个epoch 如果当前epoch <= 上次提交的epoch加一天 说明一天内已经提交过 不提交 todo
+    # if current_metrics.epoch <= (prev_metrics.epoch + 225):  # commit happens once per day
+    #     logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
+    #     return
 
     # Get full metrics using polling (get keys from registry, get balances from beacon)
     current_metrics = get_full_current_metrics(
@@ -359,7 +359,7 @@ def update_beacon_data():
     warnings = compare_pool_metrics(prev_metrics, current_metrics)
 
     logging.info(
-        f'Tx call data: oracle.reportBeacon({current_metrics.epoch}, {current_metrics.beaconBalance}, {current_metrics.beaconValidators})'
+        f'Tx call data: oracle.reportBeacon({current_metrics.epoch}, {current_metrics.beaconBalance}, {current_metrics.beaconValidators}, {current_metrics.rewardsVaultBalance}, {current_metrics.exitedValidatorsCount})'
     )
     # 上报数据
     if not dry_run:
@@ -367,9 +367,11 @@ def update_beacon_data():
         try:
             metrics_exporter_state.reportableFrame.set(True)
             tx = build_report_beacon_tx(
-                current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators,current_metrics.rewardsVaultBalance)
+                current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators, current_metrics.rewardsVaultBalance, current_metrics.exitedValidatorsCount)
             # Create the tx and execute it locally to check validity
+            # logging.info(f'Calling tx: ', {tx})
             w3.eth.call(tx)
+
             logging.info('Calling tx locally succeeded.')
             if run_as_daemon:
                 if warnings:
@@ -390,6 +392,7 @@ def update_beacon_data():
 
         except SolidityError as sl:
             str_sl = str(sl)
+
             if "EPOCH_IS_TOO_OLD" in str_sl:
                 logging.info('Calling tx locally reverted "EPOCH_IS_TOO_OLD"')
             elif "ALREADY_SUBMITTED" in str_sl:

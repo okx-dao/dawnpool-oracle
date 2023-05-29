@@ -180,7 +180,7 @@ epochs_per_frame = beacon_spec[0]
 slots_per_epoch = beacon_spec[1]
 # 每个槽位的时间长度：12秒（Seconds Per Slot）
 seconds_per_slot = beacon_spec[2]
-# 以太坊创世纪时间戳: 1438269973，对应的日期时间为 2015 年 7 月 30 日 14:26:13 UTC todo Goerli 测试网的 genesis time 值为：1554135429，对应的日期时间为 2019 年 4 月 1 日 12:43:49 UTC
+# 以太坊2的创世纪时间戳 主网: 1606824023  Goerli测试网的值为：1616508000 todo
 genesis_time = beacon_spec[3]
 
 beacon = BeaconChainClient(beacon_provider, slots_per_epoch)
@@ -346,9 +346,9 @@ def update_beacon_data():
     )
 
     # 一天225个epoch 如果当前epoch <= 上次提交的epoch加一天 说明一天内已经提交过 不提交 todo
-    # if current_metrics.epoch <= (prev_metrics.epoch + 225):  # commit happens once per day
-    #     logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
-    #     return
+    if current_metrics.epoch <= (prev_metrics.epoch + 225):  # commit happens once per day
+        logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
+        return
 
     # Get full metrics using polling (get keys from registry, get balances from beacon)
     current_metrics = get_full_current_metrics(

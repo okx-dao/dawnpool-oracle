@@ -4,6 +4,7 @@ ENV LANG=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
+#    使用阿里云的源进行安装
 RUN sed -i "s@http://\(deb\|security\).debian.org@https://mirrors.aliyun.com@g" /etc/apt/sources.list
 RUN apt-get update \
     && apt-get install -y wget net-tools curl git gcc libffi-dev g++ \
@@ -18,9 +19,10 @@ FROM base as builder
 
 ENV POETRY_VERSION=1.4.2 \
     POETRY_HOME="/opt/poetry"
-
+# 设置 shell，防止在管道中出现错误而不继续执行
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# 下载并安装 Poetry 依赖管理器
 RUN cd /home && wget https://github.com/python-poetry/poetry/releases/download/1.4.2/poetry-1.4.2-py3-none-any.whl \
     && /usr/local/bin/python -m pip install --upgrade pip && pip install wheel && pip --default-timeout=6000 install -i https://mirrors.aliyun.com/pypi/simple ./poetry-1.4.2-py3-none-any.whl
 ENV PATH="$POETRY_HOME/bin:$PATH"
@@ -77,4 +79,5 @@ COPY app ./
 HEALTHCHECK --interval=10s --timeout=3s \
     CMD curl -f http://localhost:$PULSE_SERVER_PORT/healthcheck || exit 1
 
+# 设置启动容器时运行的程序
 ENTRYPOINT ["python3", "-u", "oracle.py"]

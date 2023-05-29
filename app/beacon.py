@@ -48,6 +48,7 @@ class ValidatorStatus:
     WITHDRAWAL = 'withdrawal'
 
 
+
 def proxy_connect_timeout_exception(func):
     def inner(*args, **kwargs):
         try:
@@ -126,10 +127,9 @@ class BeaconChainClient:
             if validator['validator']['pubkey'] in validator_pub_keys:
                 validators_count += 1
                 total_balance += int(validator['balance'])
-
                 if validator['status'] in [ValidatorStatus.ACTIVE, ValidatorStatus.ACTIVE_ONGOING]:
                     active_validators_balance += int(validator['balance'])
-                if validator['status'] in [ValidatorStatus.EXITED]:
+                if validator['status'] in [ValidatorStatus.WITHDRAWAL_DONE]:
                     exited_validators_count += 1
 
         # Convert Gwei to wei

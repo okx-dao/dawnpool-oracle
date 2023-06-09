@@ -131,6 +131,7 @@ class BeaconChainClient:
                     active_validators_balance += int(validator['balance'])
                 if validator['status'] in [ValidatorStatus.WITHDRAWAL_DONE]:
                     exited_validators_count += 1
+        #             todo 对比链上验证者状态和合约中验证者状态 不一致的时候更新合约中验证者的状态
 
         # Convert Gwei to wei
         total_balance *= 10**9

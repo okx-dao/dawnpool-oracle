@@ -39,7 +39,7 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
         events = oracle.events.Completed.getLogs(fromBlock=start, toBlock=end)
         # 判断 events 是否为空 如果存在符合条件的事件日志，获取最后一个事件，即 events[-1]，并从中提取出相应的信息
         if events:
-            logging.info(f'DawnPool events : {events}')
+            logging.info(f'DawnPool event : {events}')
             event = events[-1]
             result.epoch = event['args']['epochId']
             result.blockNumber = event.blockNumber
@@ -50,7 +50,7 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
         w3.toChecksumAddress(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
         block_identifier=result.blockNumber
     )
-    logging.info(f'DawnPool result : {result}')
+    logging.info(f'DawnPool result : {result.rewardsVaultBalance}')
     # If the epoch has been assigned from the last event (not the first run) 如果纪元是从最后一个事件（不是第一次运行）分配的
     if result.epoch:
         result.timestamp = get_timestamp_by_epoch(beacon_spec, result.epoch)
@@ -80,6 +80,7 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
     partial_metrics.epoch = min(
         potentially_reportable_epoch, (finalized_epoch_beacon // epochs_per_frame) * epochs_per_frame
     )
+    logging.info(f'partial_metrics epoch: {partial_metrics.epoch} ')
     partial_metrics.timestamp = get_timestamp_by_epoch(beacon_spec, partial_metrics.epoch)
     # todo
     partial_metrics.depositedValidators = pool.functions.getBeaconStat().call()[0]

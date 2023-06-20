@@ -7,7 +7,6 @@ import datetime
 
 from web3 import Web3
 
-from app.beacon import BeaconBlockNotFoundError
 from contracts import get_validators_keys
 from pool_metrics import PoolMetrics
 from prometheus_metrics import metrics_exporter_state
@@ -90,7 +89,7 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
 
 
 def get_full_current_metrics(
-    w3: Web3, pool, registry, beacon, beacon_spec, partial_metrics, rewards_vault_address
+        w3: Web3, pool, registry, beacon, beacon_spec, partial_metrics, rewards_vault_address
 ) -> PoolMetrics:
     """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
     slots_per_epoch = beacon_spec[1]
@@ -116,10 +115,7 @@ def get_full_current_metrics(
         f'{full_metrics.beaconBalance} wei or {full_metrics.beaconBalance / 1e18} ETH'
     )
 
-    try:
-        block_number = beacon.get_block_by_beacon_slot(slot)
-    except BeaconBlockNotFoundError:
-        block_number = beacon.get_block_by_beacon_slot(slot + 1)
+    block_number = beacon.get_block_by_beacon_slot(slot)
 
     logging.info(f'Validator block_number: {block_number}')
     #  查询奖励库的地址当前时间对应账户在指定区块高度时的余额
@@ -204,7 +200,7 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
     # todo 暂未考虑取款
 
     if reward >= 0:
-        logging.info(f'Validators were rewarded {reward} wei or {reward/1e18} ETH')
+        logging.info(f'Validators were rewarded {reward} wei or {reward / 1e18} ETH')
         logging.info(
             f'Rewards will increase Total pooled ethers by: {reward / previous.getTotalPooledEther() * 100:.4f} %'
         )
@@ -225,7 +221,7 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
     else:
         warnings = True
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        logging.warning(f'Penalties will decrease totalPooledEther by {-reward} wei or {-reward/1e18} ETH')
+        logging.warning(f'Penalties will decrease totalPooledEther by {-reward} wei or {-reward / 1e18} ETH')
         logging.warning('Validators were either slashed or suffered penalties!')
         logging.warning('Talk to your fellow oracles before submitting!')
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')

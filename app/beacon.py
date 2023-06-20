@@ -15,10 +15,8 @@ from urllib3.util import Retry
 
 from exceptions import BeaconConnectionTimeoutException
 
-
 DEFAULT_TIMEOUT = 60
 LONG_TIMEOUT = 60 * 40
-
 
 retry_strategy = Retry(
     total=5,
@@ -46,7 +44,6 @@ class ValidatorStatus:
     PENDING = 'pending'
     EXITED = 'exited'
     WITHDRAWAL = 'withdrawal'
-
 
 
 def proxy_connect_timeout_exception(func):
@@ -80,8 +77,16 @@ class BeaconChainClient:
     def get_block_by_beacon_slot(self, slot):
         response = session.get(urljoin(self.url, self.api_beacon_block.format(slot)), timeout=DEFAULT_TIMEOUT)
 
-        if response.status_code == 404:
-            raise BeaconBlockNotFoundError()
+        init_slot = slot
+        # todo 下一帧结束之前结束
+        while response.status_code == 404:
+            logging.info(f'slot missed: {slot}, next slot {slot + 1}')
+            # 225 epoch = 7200 slot
+            if slot < init_slot + 7200:
+                slot += 1
+                response = session.get(urljoin(self.url, self.api_beacon_block.format(slot)), timeout=DEFAULT_TIMEOUT)
+            else:
+                raise BeaconBlockNotFoundError()
 
         try:
             return int(response.json()['data']['message']['body']['execution_payload']['block_number'])
@@ -133,8 +138,8 @@ class BeaconChainClient:
                     exited_validators_count += 1
 
         # Convert Gwei to wei
-        total_balance *= 10**9
-        active_validators_balance *= 10**9
+        total_balance *= 10 ** 9
+        active_validators_balance *= 10 ** 9
 
         return total_balance, validators_count, active_validators_balance, exited_validators_count
 

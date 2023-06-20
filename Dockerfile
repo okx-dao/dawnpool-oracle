@@ -6,11 +6,11 @@ ENV LANG=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1
 RUN sed -i "s@http://\(deb\|security\).debian.org@https://mirrors.aliyun.com@g" /etc/apt/sources.list
 RUN apt-get update \
-    && apt-get install -y wget net-tools curl git gcc libffi-dev g++ \
+    && apt-get install -y vim wget net-tools curl git gcc libffi-dev g++ \
     && curl --version \
     && git --version \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean
+#    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

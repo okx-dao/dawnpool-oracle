@@ -7,6 +7,7 @@ import datetime
 
 from web3 import Web3
 
+from app.beacon import BeaconBlockNotFoundError
 from contracts import get_validators_keys
 from pool_metrics import PoolMetrics
 from prometheus_metrics import metrics_exporter_state
@@ -87,7 +88,12 @@ def get_full_current_metrics(
         f'{full_metrics.beaconBalance} wei or {full_metrics.beaconBalance / 1e18} ETH'
     )
 
-    block_number = beacon.get_block_by_beacon_slot(slot)
+    # todo  slot missed slot = slot+1
+    try:
+        block_number = beacon.get_block_by_beacon_slot(slot)
+    except BeaconBlockNotFoundError:
+        block_number = beacon.get_block_by_beacon_slot(slot+1)
+
     withdrawal_credentials = w3.toHex(pool.functions.getWithdrawalCredentials().call(block_identifier=block_number))
     full_metrics.withdrawalVaultBalance = w3.eth.get_balance(
         w3.toChecksumAddress(withdrawal_credentials.replace('0x010000000000000000000000', '0x')),

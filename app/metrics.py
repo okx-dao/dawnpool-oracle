@@ -7,125 +7,117 @@ import datetime
 
 from web3 import Web3
 
+from app.beacon import BeaconBlockNotFoundError
 from contracts import get_validators_keys
 from pool_metrics import PoolMetrics
 from prometheus_metrics import metrics_exporter_state
 
 
-def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, from_block=0) -> PoolMetrics:
+def get_previous_metrics(w3, pool, oracle, beacon_spec, from_block=0) -> PoolMetrics:
     """Since the contract lacks a method that returns the time of last report and the reported numbers
     we are using web3.py filtering to fetch it from the contract events."""
     logging.info('Getting previously reported numbers (will be fetched from events)...')
     genesis_time = beacon_spec[3]
     result = PoolMetrics()
-    # 通过abi调用pool合约
     result.depositedValidators, result.beaconValidators, result.beaconBalance = pool.functions.getBeaconStat().call()
-    # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
     result.bufferedBalance = pool.functions.getBufferedEther().call()
-    # Calculate the earliest block to limit scanning depth 计算最早的块以限制扫描深度
-    # 每个 ETH1 块的秒数 正常12s 出一个块 设置14s为了遍历 todo
+
+    # Calculate the earliest block to limit scanning depth
     SECONDS_PER_ETH1_BLOCK = 14
     latest_block = w3.eth.getBlock('latest')
     from_block = max(from_block, int((latest_block['timestamp'] - genesis_time) / SECONDS_PER_ETH1_BLOCK))
-
-    latest_num = latest_block['number']
-    # todo
-    logging.info(f'DawnPool from_block : {from_block}, latest_num : {latest_num}')
-    # Try to fetch and parse last 'Completed' event from the contract. 遍历从合约中获取并解析最后一个“已完成”事件。
-    step = 1000
+    step = 10000
+    # Try to fetch and parse last 'Completed' event from the contract.
     for end in range(latest_block['number'], from_block, -step):
         start = max(end - step + 1, from_block)
-        # 调用了 getLogs 方法来读取区块链上合约中 Completed 事件在指定区块高度范围内的日志,日志会被存储在 events 变量中
         events = oracle.events.Completed.getLogs(fromBlock=start, toBlock=end)
-        # 判断 events 是否为空 如果存在符合条件的事件日志，获取最后一个事件，即 events[-1]，并从中提取出相应的信息
         if events:
-            logging.info(f'DawnPool events : {events}')
             event = events[-1]
             result.epoch = event['args']['epochId']
             result.blockNumber = event.blockNumber
             break
 
-    #  查询奖励库的地址(配置在环境变量里)对应账户在指定区块高度时的余额
-    result.rewardsVaultBalance = w3.eth.get_balance(
-        w3.toChecksumAddress(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
-        block_identifier=result.blockNumber
-    )
-    logging.info(f'DawnPool result : {result}')
-    # If the epoch has been assigned from the last event (not the first run) 如果纪元是从最后一个事件（不是第一次运行）分配的
+    # If the epoch has been assigned from the last event (not the first run)
     if result.epoch:
         result.timestamp = get_timestamp_by_epoch(beacon_spec, result.epoch)
     else:
-        # If it's the first run, we set timestamp to genesis time 如果是第一次运行，我们将时间戳设置为创世时间
+        # If it's the first run, we set timestamp to genesis time
         result.timestamp = genesis_time
     return result
 
 
 def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
     """Fetch current frame, buffered balance and epoch"""
-    # 每帧的epoch数
     epochs_per_frame = beacon_spec[0]
     partial_metrics = PoolMetrics()
     partial_metrics.blockNumber = w3.eth.getBlock('latest')['number']  # Get the epoch that is finalized and reportable
-    # 当前帧信息的数组 todo 通过abi合约调用查询
     current_frame = oracle.functions.getCurrentFrame().call()
-    # 当前帧所在的epoch，作为潜在的报告epoch
     potentially_reportable_epoch = current_frame[0]
     logging.info(f'Potentially reportable epoch: {potentially_reportable_epoch} (from ETH1 contract)')
-    # 获得最终确定的纪元
     finalized_epoch_beacon = beacon.get_finalized_epoch()
     # For Web3 client
     # finalized_epoch_beacon = int(beacon.get_finality_checkpoint()['data']['finalized']['epoch'])
     logging.info(f'Last finalized epoch: {finalized_epoch_beacon} (from Beacon)')
-    # //是向下取整 todo 第二个通过计算得出的实际报告时代 计算信标链中已经最终化的时代数 finalized_epoch_beacon 所在的当前帧
     partial_metrics.epoch = min(
         potentially_reportable_epoch, (finalized_epoch_beacon // epochs_per_frame) * epochs_per_frame
     )
     partial_metrics.timestamp = get_timestamp_by_epoch(beacon_spec, partial_metrics.epoch)
-    # todo
     partial_metrics.depositedValidators = pool.functions.getBeaconStat().call()[0]
     partial_metrics.bufferedBalance = pool.functions.getBufferedEther().call()
-    logging.info(f'Last partial_metrics: {partial_metrics} ')
     return partial_metrics
 
 
 def get_full_current_metrics(
-    w3: Web3, pool, registry, beacon, beacon_spec, partial_metrics, rewards_vault_address
+    w3: Web3, pool, beacon, beacon_spec, partial_metrics, consider_withdrawals_from_epoch
 ) -> PoolMetrics:
     """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
-    slots_per_epoch = beacon_spec[1]
-    logging.info(f'Reportable slots_per_epoch: {slots_per_epoch} ,partial_metrics.epoch: {partial_metrics.epoch}')
-    slot = partial_metrics.epoch * slots_per_epoch
-    logging.info(f'Reportable state, epoch:{partial_metrics.epoch} slot:{slot}')
-    # todo 获取注册的验证者的key 通过abi获取
-    validators_keys = registry.functions.getNodeValidators(0, 0).call()[1]
-    logging.info(f'Total validator keys detail: {validators_keys}')
+    slot = beacon.get_slot_for_report(partial_metrics.epoch * beacon_spec[1], beacon_spec[0], beacon_spec[1])
+    logging.info(f'Reportable state: epoch:{partial_metrics.epoch} slot:{slot}')
+    validators_keys = get_validators_keys(w3)
     logging.info(f'Total validator keys in registry: {len(validators_keys)}')
     full_metrics = partial_metrics
-    # 根据验证者的key在信标链中计算信标余额，信标验证器，活跃的验证者余额
     full_metrics.validatorsKeysNumber = len(validators_keys)
     (
         full_metrics.beaconBalance,
         full_metrics.beaconValidators,
         full_metrics.activeValidatorBalance,
-        full_metrics.exitedValidatorsCount,
     ) = beacon.get_balances(slot, validators_keys)
 
     logging.info(
-        f'DawnPool validators\' sum. balance on Beacon: '
+        f'Lido validators\' sum. balance on Beacon: '
         f'{full_metrics.beaconBalance} wei or {full_metrics.beaconBalance / 1e18} ETH'
     )
 
-    block_number = beacon.get_block_by_beacon_slot(slot)
-    logging.info(f'Validator block_number: {block_number}')
-    #  查询奖励库的地址当前时间对应账户在指定区块高度时的余额
-    full_metrics.rewardsVaultBalance = w3.eth.get_balance(
-        w3.toChecksumAddress(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
+    # todo  slot missed slot = slot+1
+    try:
+        block_number = beacon.get_block_by_beacon_slot(slot)
+    except BeaconBlockNotFoundError:
+        block_number = beacon.get_block_by_beacon_slot(slot+1)
+
+    withdrawal_credentials = w3.toHex(pool.functions.getWithdrawalCredentials().call(block_identifier=block_number))
+    full_metrics.withdrawalVaultBalance = w3.eth.get_balance(
+        w3.toChecksumAddress(withdrawal_credentials.replace('0x010000000000000000000000', '0x')),
         block_identifier=block_number
     )
-    logging.info(f'DawnPool the balance of the reward pool address : {full_metrics.rewardsVaultBalance}')
-    # todo 暂时未考虑取款情况(通过合约获取提款凭证对应的地址, 查询提款地址在指定区块高度时的余额)
 
-    logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
+    logging.info(
+        f'Withdrawal vault balance: {full_metrics.withdrawalVaultBalance} wei or {full_metrics.withdrawalVaultBalance / 1e18} ETH'
+    )
+
+    corrected_balance = full_metrics.beaconBalance + full_metrics.withdrawalVaultBalance
+    logging.info(
+        f'Lido validators\' sum. balance on Beacon corrected by withdrawals: '
+        f'{corrected_balance} wei or {corrected_balance / 1e18} ETH'
+    )
+
+    if full_metrics.epoch >= int(consider_withdrawals_from_epoch):
+        full_metrics.beaconBalance = corrected_balance
+        logging.info('Corrected balance on Beacon is accounted')
+    else:
+        remaining = int(consider_withdrawals_from_epoch) - full_metrics.epoch
+        logging.info(f'Corrected balance on Beacon is NOT accounted yet. Remaining epochs before account: {remaining}')
+
+    logging.info(f'Lido validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics
 
 
@@ -136,16 +128,15 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
     warnings = False
     assert previous.DEPOSIT_SIZE == current.DEPOSIT_SIZE
     DEPOSIT_SIZE = previous.DEPOSIT_SIZE
-    # 间隔时间
     delta_seconds = current.timestamp - previous.timestamp
-    # 新增验证者
+    metrics_exporter_state.deltaSeconds.set(delta_seconds)  # fixme: get rid of side effects
     appeared_validators = current.beaconValidators - previous.beaconValidators
+    metrics_exporter_state.appearedValidators.set(appeared_validators)
     logging.info(f'Time delta: {datetime.timedelta(seconds=delta_seconds)} or {delta_seconds} s')
     logging.info(
         f'depositedValidators before:{previous.depositedValidators} after:{current.depositedValidators} change:{current.depositedValidators - previous.depositedValidators}'
     )
 
-    # 信标验证者数量意外减少
     if current.beaconValidators < previous.beaconValidators:
         warnings = True
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
@@ -170,13 +161,11 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
     logging.info(f'totalPooledEther before:{previous.getTotalPooledEther()} after:{current.getTotalPooledEther()} ')
     logging.info(f'activeValidatorBalance now:{current.activeValidatorBalance} ')
 
-    # 验证者的币余额期望值(reward_base)  根据当前 epoch 中出现的有效验证者数量和每个验证者的抵押金额(DEPOSIT_SIZE) 计算出当前 epoch 的奖励基数 + 上一个epoch该验证者的余额
     reward_base = appeared_validators * DEPOSIT_SIZE + previous.beaconBalance
-    # 验证者当前epoch应该获得的奖励 = 当前epoch结束时验证者余额 - 验证者的币余额期望值
     reward = current.beaconBalance - reward_base
     if not previous.getTotalPooledEther():
         logging.info(
-            'The DawnPool has no funds under its control. Probably the system has been just deployed and has never been deposited'
+            'The Lido has no funds under its control. Probably the system has been just deployed and has never been deposited'
         )
         return
 
@@ -195,8 +184,6 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
         daily_reward_rate = reward / current.activeValidatorBalance / days
 
     apr = daily_reward_rate * 365
-
-    # todo 暂未考虑取款
 
     if reward >= 0:
         logging.info(f'Validators were rewarded {reward} wei or {reward/1e18} ETH')

@@ -7,6 +7,7 @@ import datetime
 
 from web3 import Web3
 
+from app.beacon import BeaconBlockNotFoundError
 from contracts import get_validators_keys
 from pool_metrics import PoolMetrics
 from prometheus_metrics import metrics_exporter_state
@@ -115,7 +116,11 @@ def get_full_current_metrics(
         f'{full_metrics.beaconBalance} wei or {full_metrics.beaconBalance / 1e18} ETH'
     )
 
-    block_number = beacon.get_block_by_beacon_slot(slot)
+    try:
+        block_number = beacon.get_block_by_beacon_slot(slot)
+    except BeaconBlockNotFoundError:
+        block_number = beacon.get_block_by_beacon_slot(slot + 1)
+
     logging.info(f'Validator block_number: {block_number}')
     #  查询奖励库的地址当前时间对应账户在指定区块高度时的余额
     full_metrics.rewardsVaultBalance = w3.eth.get_balance(

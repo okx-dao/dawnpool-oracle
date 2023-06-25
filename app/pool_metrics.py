@@ -14,6 +14,9 @@ class PoolMetrics:
     activeValidatorBalance = 0
     withdrawalVaultBalance = 0
     exitedValidatorsCount = 0
+    burnedPethAmount = 0
+    lastRequestIdToBeFulfilled = 0
+    ethAmountToLock = 0
     validatorsKeysNumber = None
 
     def getTotalPooledEther(self):

@@ -212,7 +212,7 @@ logging.info(f'Genesis time: {genesis_time} (auto-discovered)')
 
 def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount):  # hash tx
     max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
-    return oracle.functions.reportBeacon(epoch, balance // 10**9, validators, rewardsBalance, exitedValidatorsCount).buildTransaction(
+    return oracle.functions.reportBeacon(epoch, balance, validators, rewardsBalance, exitedValidatorsCount).buildTransaction(
         {
             'from': account.address,
             'gas': GAS_LIMIT,

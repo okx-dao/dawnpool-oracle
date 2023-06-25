@@ -18,8 +18,8 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     logging.info('Getting previously reported numbers (will be fetched from events)...')
     genesis_time = beacon_spec[3]
     result = PoolMetrics()
-    # 通过abi调用pool合约
-    result.depositedValidators, result.beaconValidators, result.beaconBalance = pool.functions.getBeaconStat().call()
+    # 通过abi调用pool合约 todo preDepositValidators 参数验证
+    result.preDepositValidators, result.depositedValidators, result.beaconValidators, result.beaconBalance = pool.functions.getBeaconStat().call()
     # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
     result.bufferedBalance = pool.functions.getBufferedEther().call()
     # Calculate the earliest block to limit scanning depth 计算最早的块以限制扫描深度
@@ -29,7 +29,6 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     from_block = max(from_block, int((latest_block['timestamp'] - genesis_time) / SECONDS_PER_ETH1_BLOCK))
 
     latest_num = latest_block['number']
-    # todo
     logging.info(f'DawnPool from_block : {from_block}, latest_num : {latest_num}')
     # Try to fetch and parse last 'Completed' event from the contract. 遍历从合约中获取并解析最后一个“已完成”事件。
     step = 1000

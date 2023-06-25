@@ -130,9 +130,10 @@ class BeaconChainClient:
 
         for validator in all_validators:
             if validator['validator']['pubkey'] in validator_pub_keys:
-                validators_count += 1
                 total_balance += int(validator['balance'])
                 if validator['status'] in [ValidatorStatus.ACTIVE, ValidatorStatus.ACTIVE_ONGOING]:
+                    # 需要上传激活的验证者数量
+                    validators_count += 1
                     active_validators_balance += int(validator['balance'])
                 if validator['status'] in [ValidatorStatus.WITHDRAWAL_DONE]:
                     exited_validators_count += 1

@@ -68,7 +68,7 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
 
 
 def get_full_current_metrics(
-    w3: Web3, pool, beacon, beacon_spec, partial_metrics, consider_withdrawals_from_epoch
+    w3: Web3, pool, registry, burner, beacon, beacon_spec, partial_metrics, consider_withdrawals_from_epoch
 ) -> PoolMetrics:
     """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
     slot = beacon.get_slot_for_report(partial_metrics.epoch * beacon_spec[1], beacon_spec[0], beacon_spec[1])
@@ -110,6 +110,10 @@ def get_full_current_metrics(
         f'{corrected_balance} wei or {corrected_balance / 1e18} ETH'
     )
 
+    # 新增获取燃币金额 todo
+    full_metrics.burnedPethAmount = burner.functions.getPEthBurnRequest().call()
+    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount }')
+
     if full_metrics.epoch >= int(consider_withdrawals_from_epoch):
         full_metrics.beaconBalance = corrected_balance
         logging.info('Corrected balance on Beacon is accounted')
@@ -117,7 +121,7 @@ def get_full_current_metrics(
         remaining = int(consider_withdrawals_from_epoch) - full_metrics.epoch
         logging.info(f'Corrected balance on Beacon is NOT accounted yet. Remaining epochs before account: {remaining}')
 
-    logging.info(f'Lido validators visible on Beacon: {full_metrics.beaconValidators}')
+    logging.info(f'Dawn validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics
 
 

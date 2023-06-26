@@ -231,6 +231,7 @@ logging.info(f'Genesis time: {genesis_time} (auto-discovered)')
 
 def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount, lastRequestIdToBeFulfilled, ethAmountToLock):  # hash tx
     max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
+    # todo 金额位数修改
     return oracle.functions.reportBeacon(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount, lastRequestIdToBeFulfilled, ethAmountToLock).buildTransaction(
         {
             'from': account.address,

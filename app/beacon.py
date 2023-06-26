@@ -115,7 +115,7 @@ class BeaconChainClient:
             raise KeyError from error
 
     @proxy_connect_timeout_exception
-    def get_balances(self, slot, keys_list) -> Tuple[int, int, int]:
+    def get_balances(self, slot, keys_list) -> Tuple[int, int, int, int]:
         all_validators = self._fetch_balances(slot)
         #  拉取时间太长 先过滤测试
         # all_validators = []

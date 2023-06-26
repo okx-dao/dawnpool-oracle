@@ -59,7 +59,7 @@ ORACLE_ARTIFACT_FILE = 'DawnPoolOracle.json'
 POOL_ARTIFACT_FILE = 'DawnDeposit.json'
 REGISTRY_ARTIFACT_FILE = 'DepositNodeManager.json'
 BURNER_ARTIFACT_FILE = 'Burner.json'
-
+WITHDRAW_ARTIFACT_FILE = 'Withdraw.json'
 
 DEFAULT_SLEEP = 60
 DEFAULT_COUNTDOWN_SLEEP = 10
@@ -92,12 +92,17 @@ burner_address = os.environ['BURNER_CONTRACT']
 if not Web3.isChecksumAddress(burner_address):
     burner_address = Web3.toChecksumAddress(burner_address)
 
+withdraw_address = os.environ['WITHDRAW_CONTRACT']
+if not Web3.isChecksumAddress(withdraw_address):
+    withdraw_address = Web3.toChecksumAddress(withdraw_address)
+
 
 # 获取合约abi路径
 oracle_abi_path = os.path.join(ARTIFACTS_DIR, ORACLE_ARTIFACT_FILE)
 pool_abi_path = os.path.join(ARTIFACTS_DIR, POOL_ARTIFACT_FILE)
 registry_abi_path = os.path.join(ARTIFACTS_DIR, REGISTRY_ARTIFACT_FILE)
 burner_abi_path = os.path.join(ARTIFACTS_DIR, BURNER_ARTIFACT_FILE)
+withdraw_abi_path = os.path.join(ARTIFACTS_DIR, WITHDRAW_ARTIFACT_FILE)
 
 member_privkey = os.getenv('MEMBER_PRIV_KEY')
 SLEEP = int(os.getenv('SLEEP', DEFAULT_SLEEP))
@@ -170,6 +175,11 @@ with open(burner_abi_path, 'r') as file:
 abi = json.loads(a)
 burner = w3.eth.contract(abi=abi['abi'], address=burner_address)
 
+with open(withdraw_abi_path, 'r') as file:
+    a = file.read()
+abi = json.loads(a)
+withdraw = w3.eth.contract(abi=abi['abi'], address=withdraw_address)
+
 
 # Get Registry contract
 # registry_address = pool.functions.getOperators().call()
@@ -183,7 +193,7 @@ burner = w3.eth.contract(abi=abi['abi'], address=burner_address)
 
 # Get Beacon specs from contract 查询了当前区块链上的信标链规范数据
 beacon_spec = oracle.functions.getBeaconSpec().call()
-# 每个信标链帧（Beacon Chain Frame）中包含的epochs: 64个epochs todo 每一帧包含的epochs在oracle中定义 225个
+# 每个信标链帧（Beacon Chain Frame）中包含的epochs: 每一帧包含的epochs在oracle中定义 225个
 epochs_per_frame = beacon_spec[0]
 # 每个epoch的插槽数: 32个slot
 slots_per_epoch = beacon_spec[1]
@@ -219,9 +229,9 @@ logging.info(f'Epochs per frame: {epochs_per_frame} (auto-discovered)')
 logging.info(f'Genesis time: {genesis_time} (auto-discovered)')
 
 
-def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount):  # hash tx
+def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount, lastRequestIdToBeFulfilled, ethAmountToLock):  # hash tx
     max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
-    return oracle.functions.reportBeacon(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount).buildTransaction(
+    return oracle.functions.reportBeacon(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount, lastRequestIdToBeFulfilled, ethAmountToLock).buildTransaction(
         {
             'from': account.address,
             'gas': GAS_LIMIT,
@@ -361,7 +371,7 @@ def update_beacon_data():
 
     # Get full metrics using polling (get keys from registry, get balances from beacon)
     current_metrics = get_full_current_metrics(
-        w3, pool, registry, burner, beacon, beacon_spec, current_metrics, rewards_vault_address
+        w3, pool, registry, burner, withdraw, beacon, beacon_spec, current_metrics, rewards_vault_address
     )
     metrics_exporter_state.set_current_pool_metrics(current_metrics)
     # 对比
@@ -369,7 +379,7 @@ def update_beacon_data():
 
     logging.info(
         f'Tx call data: oracle.reportBeacon({current_metrics.epoch}, {current_metrics.beaconBalance}, {current_metrics.beaconValidators}, {current_metrics.rewardsVaultBalance}'
-        f', {current_metrics.exitedValidatorsCount} , {current_metrics.burnedPethAmount})'
+        f', {current_metrics.exitedValidatorsCount} , {current_metrics.burnedPethAmount}, {current_metrics.lastRequestIdToBeFulfilled}, {current_metrics.ethAmountToLock})'
     )
     # 上报数据
     if not dry_run:
@@ -378,7 +388,7 @@ def update_beacon_data():
             metrics_exporter_state.reportableFrame.set(True)
             tx = build_report_beacon_tx(
                 current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators, current_metrics.rewardsVaultBalance,
-                current_metrics.exitedValidatorsCount, current_metrics.burnedPethAmount)
+                current_metrics.exitedValidatorsCount, current_metrics.burnedPethAmount, current_metrics.lastRequestIdToBeFulfilled, current_metrics.ethAmountToLock)
             # Create the tx and execute it locally to check validity
             # logging.info(f'Calling tx: ', {tx})
             w3.eth.call(tx)

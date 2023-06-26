@@ -123,7 +123,6 @@ def get_full_current_metrics(
         block_identifier=block_number
     )
     logging.info(f'DawnPool the balance of the reward pool address : {full_metrics.rewardsVaultBalance}')
-    # todo 暂时未考虑取款情况(通过合约获取提款凭证对应的地址, 查询提款地址在指定区块高度时的余额)
 
     logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics

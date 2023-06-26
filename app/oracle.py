@@ -371,7 +371,7 @@ def update_beacon_data():
 
     # Get full metrics using polling (get keys from registry, get balances from beacon)
     current_metrics = get_full_current_metrics(
-        w3, pool, withdraw, burner, beacon, beacon_spec, current_metrics, rewards_vault_address
+        w3, pool, registry, burner, beacon, beacon_spec, current_metrics, rewards_vault_address
     )
     metrics_exporter_state.set_current_pool_metrics(current_metrics)
     # 对比

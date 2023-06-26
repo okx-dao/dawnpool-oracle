@@ -68,7 +68,7 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
 
 
 def get_full_current_metrics(
-    w3: Web3, pool, registry, burner, beacon, beacon_spec, partial_metrics, consider_withdrawals_from_epoch
+        w3: Web3, pool, withdraw, burner, beacon, beacon_spec, partial_metrics, consider_withdrawals_from_epoch
 ) -> PoolMetrics:
     """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
     slot = beacon.get_slot_for_report(partial_metrics.epoch * beacon_spec[1], beacon_spec[0], beacon_spec[1])
@@ -81,6 +81,7 @@ def get_full_current_metrics(
         full_metrics.beaconBalance,
         full_metrics.beaconValidators,
         full_metrics.activeValidatorBalance,
+        full_metrics.exitedValidatorsCount,
     ) = beacon.get_balances(slot, validators_keys)
 
     logging.info(
@@ -92,7 +93,7 @@ def get_full_current_metrics(
     try:
         block_number = beacon.get_block_by_beacon_slot(slot)
     except BeaconBlockNotFoundError:
-        block_number = beacon.get_block_by_beacon_slot(slot+1)
+        block_number = beacon.get_block_by_beacon_slot(slot + 1)
 
     withdrawal_credentials = w3.toHex(pool.functions.getWithdrawalCredentials().call(block_identifier=block_number))
     full_metrics.withdrawalVaultBalance = w3.eth.get_balance(
@@ -112,7 +113,55 @@ def get_full_current_metrics(
 
     # 新增获取燃币金额 todo
     full_metrics.burnedPethAmount = burner.functions.getPEthBurnRequest().call()
-    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount }')
+    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount}')
+
+    # 获取lastRequestIdToBeFulfilled和ethAmountToLock todo
+    buffered_ether = pool.functions.getBufferedEther().call()
+    # 返回数组切片 returns (WithdrawRequest[] memory unfulfilledWithdrawRequestQueue)
+    unfulfilled_withdraw_request_queue = withdraw.functions.getUnfulfilledWithdrawRequestQueue().call()
+    logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue : {unfulfilled_withdraw_request_queue}')
+
+    request_sum = 0
+    target_index = 0
+    target_value = 0
+    latest_index = 0
+
+    # 计算汇率：预估当前数据提交后，汇率是多少
+    # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
+    # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
+    pre_calculate_exchange_rate = withdraw.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
+                                                                              full_metrics.activeValidatorBalance,
+                                                                              full_metrics.withdrawalVaultBalance,
+                                                                              full_metrics.exitedValidatorsCount)
+    logging.info(f'Dawn pre_calculate_exchange_rate : {pre_calculate_exchange_rate}')
+    # 遍历数组  从1开始遍历
+    for i in range(1, len(unfulfilled_withdraw_request_queue)):
+        if len(unfulfilled_withdraw_request_queue) < 2:
+            break
+
+        # struct WithdrawRequest {address owner;uint256 cumulativePEth; uint256 maxCumulativeClaimableEther;
+        # uint256 createdTime; bool claimed; }
+        # 赎回请求时汇率计算得到的ether
+        eth_amount1 = unfulfilled_withdraw_request_queue[i][2] - unfulfilled_withdraw_request_queue[i - 1][2]
+        # 赎回的peth量
+        peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
+        # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
+        eth_amount2 = peth * pre_calculate_exchange_rate[0] / pre_calculate_exchange_rate[1]
+        actual_amount = min(eth_amount1, eth_amount2)
+
+        if request_sum + actual_amount > buffered_ether + full_metrics.withdrawalVaultBalance:
+            target_index = i - 1
+            target_value = request_sum
+            logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue  target_index: {i}, target_value: {target_value}')
+            break
+        request_sum += actual_amount
+
+    # returns (uint256 lastFulfillmentRequestId, uint256 lastRequestId, uint256 lastCheckpointIndex);
+    withdraw_queue_stat = pool.functions.getWithdrawQueueStat().call()
+    latest_index = withdraw_queue_stat[0] + target_index
+
+    full_metrics.lastRequestIdToBeFulfilled = latest_index
+    full_metrics.ethAmountToLock = target_value
 
     if full_metrics.epoch >= int(consider_withdrawals_from_epoch):
         full_metrics.beaconBalance = corrected_balance
@@ -190,7 +239,7 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
     apr = daily_reward_rate * 365
 
     if reward >= 0:
-        logging.info(f'Validators were rewarded {reward} wei or {reward/1e18} ETH')
+        logging.info(f'Validators were rewarded {reward} wei or {reward / 1e18} ETH')
         logging.info(
             f'Rewards will increase Total pooled ethers by: {reward / previous.getTotalPooledEther() * 100:.4f} %'
         )
@@ -211,7 +260,7 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
     else:
         warnings = True
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        logging.warning(f'Penalties will decrease totalPooledEther by {-reward} wei or {-reward/1e18} ETH')
+        logging.warning(f'Penalties will decrease totalPooledEther by {-reward} wei or {-reward / 1e18} ETH')
         logging.warning('Validators were either slashed or suffered penalties!')
         logging.warning('Talk to your fellow oracles before submitting!')
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')

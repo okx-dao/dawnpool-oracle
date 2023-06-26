@@ -87,7 +87,7 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
 
 
 def get_full_current_metrics(
-        w3: Web3, pool, registry, beacon, beacon_spec, partial_metrics, rewards_vault_address
+        w3: Web3, pool, registry, burner, withdraw, beacon, beacon_spec, partial_metrics, rewards_vault_address
 ) -> PoolMetrics:
     """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
     slots_per_epoch = beacon_spec[1]
@@ -122,6 +122,65 @@ def get_full_current_metrics(
         block_identifier=block_number
     )
     logging.info(f'DawnPool the balance of the reward pool address : {full_metrics.rewardsVaultBalance}')
+
+    # 新增获取燃币金额 todo
+    full_metrics.burnedPethAmount = burner.functions.getPEthBurnRequest().call()
+    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount}')
+
+    # 获取lastRequestIdToBeFulfilled和ethAmountToLock todo
+    buffered_ether = pool.functions.getBufferedEther().call()
+    # 返回数组切片 returns (WithdrawRequest[] memory unfulfilledWithdrawRequestQueue)
+    unfulfilled_withdraw_request_queue = withdraw.functions.getUnfulfilledWithdrawRequestQueue().call()
+    logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue : {unfulfilled_withdraw_request_queue}')
+
+    request_sum = 0
+    target_index = 0
+    target_value = 0
+    latest_index = 0
+
+    # 计算汇率：预估当前数据提交后，汇率是多少
+    # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
+    # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
+    pre_calculate_exchange_rate = withdraw.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
+                                                                              full_metrics.activeValidatorBalance,
+                                                                              full_metrics.withdrawalVaultBalance,
+                                                                              full_metrics.exitedValidatorsCount)
+    logging.info(f'Dawn pre_calculate_exchange_rate : {pre_calculate_exchange_rate}')
+    # 遍历数组  从1开始遍历
+    for i in range(1, len(unfulfilled_withdraw_request_queue)):
+        if len(unfulfilled_withdraw_request_queue) < 2:
+            break
+
+        # struct WithdrawRequest {address owner;uint256 cumulativePEth; uint256 maxCumulativeClaimableEther;
+        # uint256 createdTime; bool claimed; }
+        # 赎回请求时汇率计算得到的ether
+        eth_amount1 = unfulfilled_withdraw_request_queue[i][2] - unfulfilled_withdraw_request_queue[i - 1][2]
+        # 赎回的peth量
+        peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
+        # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
+        eth_amount2 = peth * pre_calculate_exchange_rate[0] / pre_calculate_exchange_rate[1]
+        actual_amount = min(eth_amount1, eth_amount2)
+
+        if request_sum + actual_amount > buffered_ether + full_metrics.withdrawalVaultBalance:
+            target_index = i - 1
+            target_value = request_sum
+            logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue  target_index: {i}, target_value: {target_value}')
+            break
+        request_sum += actual_amount
+
+    # returns (uint256 lastFulfillmentRequestId, uint256 lastRequestId, uint256 lastCheckpointIndex);
+    withdraw_queue_stat = pool.functions.getWithdrawQueueStat().call()
+    latest_index = withdraw_queue_stat[0] + target_index
+
+    full_metrics.lastRequestIdToBeFulfilled = latest_index
+    full_metrics.ethAmountToLock = target_value
+
+    # if full_metrics.epoch >= int(consider_withdrawals_from_epoch):
+    #     full_metrics.beaconBalance = corrected_balance
+    #     logging.info('Corrected balance on Beacon is accounted')
+    # else:
+    #     remaining = int(consider_withdrawals_from_epoch) - full_metrics.epoch
+    #     logging.info(f'Corrected balance on Beacon is NOT accounted yet. Remaining epochs before account: {remaining}')
 
     logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics

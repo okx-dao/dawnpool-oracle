@@ -23,7 +23,7 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
     result.bufferedBalance = pool.functions.getBufferedEther().call()
     # Calculate the earliest block to limit scanning depth 计算最早的块以限制扫描深度
-    # 每个 ETH1 块的秒数 正常12s 出一个块 设置14s为了遍历 todo
+    # 每个 ETH1 块的秒数 正常12s 出一个块 设置14s为了遍历
     SECONDS_PER_ETH1_BLOCK = 14
     latest_block = w3.eth.getBlock('latest')
     from_block = max(from_block, int((latest_block['timestamp'] - genesis_time) / SECONDS_PER_ETH1_BLOCK))
@@ -65,7 +65,7 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
     epochs_per_frame = beacon_spec[0]
     partial_metrics = PoolMetrics()
     partial_metrics.blockNumber = w3.eth.getBlock('latest')['number']  # Get the epoch that is finalized and reportable
-    # 当前帧信息的数组 todo 通过abi合约调用查询
+    # 当前帧信息的数组  通过abi合约调用查询
     current_frame = oracle.functions.getCurrentFrame().call()
     # 当前帧所在的epoch，作为潜在的报告epoch
     potentially_reportable_epoch = current_frame[0]
@@ -75,12 +75,11 @@ def get_light_current_metrics(w3, beacon, pool, oracle, beacon_spec):
     # For Web3 client
     # finalized_epoch_beacon = int(beacon.get_finality_checkpoint()['data']['finalized']['epoch'])
     logging.info(f'Last finalized epoch: {finalized_epoch_beacon} (from Beacon)')
-    # //是向下取整 todo 第二个通过计算得出的实际报告时代 计算信标链中已经最终化的时代数 finalized_epoch_beacon 所在的当前帧
+    # //是向下取整  第二个通过计算得出的实际报告时代 计算信标链中已经最终化的时代数 finalized_epoch_beacon 所在的当前帧
     partial_metrics.epoch = min(
         potentially_reportable_epoch, (finalized_epoch_beacon // epochs_per_frame) * epochs_per_frame
     )
     partial_metrics.timestamp = get_timestamp_by_epoch(beacon_spec, partial_metrics.epoch)
-    # todo
     partial_metrics.depositedValidators = pool.functions.getBeaconStat().call()[0]
     partial_metrics.bufferedBalance = pool.functions.getBufferedEther().call()
     logging.info(f'Last partial_metrics: {partial_metrics} ')
@@ -95,7 +94,7 @@ def get_full_current_metrics(
     logging.info(f'Reportable slots_per_epoch: {slots_per_epoch} ,partial_metrics.epoch: {partial_metrics.epoch}')
     slot = partial_metrics.epoch * slots_per_epoch
     logging.info(f'Reportable state, epoch:{partial_metrics.epoch} slot:{slot}')
-    # todo 获取注册的验证者的key 通过abi获取
+    #  获取注册的验证者的key 通过abi获取
     validators_keys = registry.functions.getNodeValidators(0, 0).call()[1]
     logging.info(f'Total validator keys detail: {validators_keys}')
     logging.info(f'Total validator keys in registry: {len(validators_keys)}')
@@ -194,8 +193,6 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
         daily_reward_rate = reward / current.activeValidatorBalance / days
 
     apr = daily_reward_rate * 365
-
-    # todo 暂未考虑取款
 
     if reward >= 0:
         logging.info(f'Validators were rewarded {reward} wei or {reward / 1e18} ETH')

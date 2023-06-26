@@ -59,7 +59,7 @@ ORACLE_ARTIFACT_FILE = 'DawnPoolOracle.json'
 POOL_ARTIFACT_FILE = 'DawnDeposit.json'
 REGISTRY_ARTIFACT_FILE = 'DepositNodeManager.json'
 BURNER_ARTIFACT_FILE = 'Burner.json'
-WITHDRAW_ARTIFACT_FILE = 'Withdraw.json'
+WITHDRAW_ARTIFACT_FILE = 'DawnWithdraw.json'
 
 DEFAULT_SLEEP = 60
 DEFAULT_COUNTDOWN_SLEEP = 10
@@ -118,7 +118,7 @@ GAS_LIMIT = int(os.getenv('GAS_LIMIT', DEFAULT_GAS_LIMIT))
 
 # 数据块的块号
 ORACLE_FROM_BLOCK = int(os.getenv('ORACLE_FROM_BLOCK', 0))
-#  指定一个epoch作为提款请求的启示点 在这个epoch之前，如果还有其他的验证节点需要提款处理，则这些提款请求也将被考虑在内。如果没有指定该参数，则默认从当前epoch开始处理验证节点的提款请求。 todo
+#  指定一个epoch作为提款请求的启示点 在这个epoch之前，如果还有其他的验证节点需要提款处理，则这些提款请求也将被考虑在内。如果没有指定该参数，则默认从当前epoch开始处理验证节点的提款请求。
 consider_withdrawals_from_epoch = os.environ.get('CONSIDER_WITHDRAWALS_FROM_EPOCH')
 
 provider = MultiProvider(eth1_provider.split(','))

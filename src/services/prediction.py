@@ -73,7 +73,12 @@ class RewardsPredictionService:
         if not eth_rewards_events:
             return Wei(0)
 
-        # ToDo 过滤七天的平均值
+        if len(eth_rewards_events) > 7:
+            # 使用 sorted() 函数对数组 eth_rewards_events 进行排序，通过 key 参数指定按照 epochId 字段进行排序,设置 reverse=True 参数来实现降序排序
+            sorted_array = sorted(eth_rewards_events, key=lambda x: x.epochId, reverse=True)
+            # 使用切片操作 [:7] 取出排序后的前 7 个元素
+            eth_rewards_events = sorted_array[:7]
+
         #  拿到最大和最小的epochId 相减得到 time_spent
         max_epoch_id = max(eth_rewards_events, key=lambda x: x['epochId'])['epochId']
         min_epoch_id = min(eth_rewards_events, key=lambda x: x['epochId'])['epochId']

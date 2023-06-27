@@ -227,6 +227,8 @@ class Ejector(BaseModule, ConsensusModule):
         for index in index_status_list:
             validators_list.append(node_validators[1][index])
 
+        list[DawnPoolValidator] = self.w3.lido_validators.get_dawn_pool_validators_by_keys(blockstamp, validators_list)
+
         for index in validators_list:
             # 获取待提款的的可提现时期，以便确定在何时可以提取这些代币  提款请求队列中的已退出验证人数量加上正在退出验证人数量再加上1 todo 可以复用 跑数据验证下
             withdrawal_epoch = self._get_predicted_withdrawable_epoch(blockstamp, eject_count + len(validators_going_to_exit) + 1)

@@ -1,6 +1,6 @@
 import logging
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, NewType, Tuple
+from typing import TYPE_CHECKING, NewType, Tuple, Optional
 
 from eth_typing import ChecksumAddress
 from web3.contract import Contract
@@ -137,6 +137,14 @@ class LidoValidatorsProvider(Module):
         validators = self.w3.cc.get_pub_key_validators(blockstamp, dawn_pool_keys)
 
         return self.merge_dawn_pool_validators_with_keys(dawn_pool_keys, validators)
+
+    @lru_cache(maxsize=1)
+    def get_dawn_pool_validators_by_keys(self, blockstamp: BlockStamp, pub_keys: Optional[str | tuple] = None) -> list[DawnPoolValidator]:
+        # 通过我们合约获取所有pub_keys todo
+        validators = self.w3.cc.get_pub_key_validators(blockstamp, pub_keys)
+
+        return self.merge_dawn_pool_validators_with_keys(pub_keys, validators)
+
 
     @staticmethod
     def merge_validators_with_keys(keys: list[LidoKey], validators: list[Validator]) -> list[LidoValidator]:

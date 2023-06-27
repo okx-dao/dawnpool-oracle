@@ -227,9 +227,9 @@ class Ejector(BaseModule, ConsensusModule):
         for index in index_status_list:
             validators_list.append(node_validators[1][index])
 
-        list[DawnPoolValidator] = self.w3.lido_validators.get_dawn_pool_validators_by_keys(blockstamp, validators_list)
+        dawn_pool_validators_list = self.w3.lido_validators.get_dawn_pool_validators_by_keys(blockstamp, validators_list)
 
-        for index in validators_list:
+        for validator in dawn_pool_validators_list:
             # 获取待提款的的可提现时期，以便确定在何时可以提取这些代币  提款请求队列中的已退出验证人数量加上正在退出验证人数量再加上1 todo 可以复用 跑数据验证下
             withdrawal_epoch = self._get_predicted_withdrawable_epoch(blockstamp, eject_count + len(validators_going_to_exit) + 1)
             # 计算即将退出的验证人可以获得的未来奖励数量  从当前 Epoch 开始，到待提款的 EL 代币可以提现的 Epoch 结束，再加上扫描的 Epoch 数量，共有多少个 Epoch. blockstamp.ref_epoch 返回指定时间戳所在的引用时期编号
@@ -270,8 +270,8 @@ class Ejector(BaseModule, ConsensusModule):
             # validators_to_eject.append(validator_container)
             # (_, validator) = validator_container
             # 更新已请求退出但仍在延迟期内的验证人节点持有的 EL 代币数量之和 todo 查询有效余额 取有效余额和32的最小值
-            validator_to_eject_balance_sum += MAX_EFFECTIVE_BALANCE
-            # validator_to_eject_balance_sum += self._get_predicted_withdrawable_balance(validator)
+            # validator_to_eject_balance_sum += MAX_EFFECTIVE_BALANCE
+            validator_to_eject_balance_sum += self._get_predicted_withdrawable_balance(validator)
             eject_count += 1
 
         return eject_count

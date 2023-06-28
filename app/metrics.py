@@ -169,7 +169,7 @@ def get_full_current_metrics(
         request_sum += actual_amount
 
     # returns (uint256 lastFulfillmentRequestId, uint256 lastRequestId, uint256 lastCheckpointIndex);
-    withdraw_queue_stat = pool.functions.getWithdrawQueueStat().call()
+    withdraw_queue_stat = withdraw.functions.getWithdrawQueueStat().call()
     latest_index = withdraw_queue_stat[0] + target_index
 
     full_metrics.lastRequestIdToBeFulfilled = latest_index

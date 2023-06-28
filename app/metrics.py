@@ -141,7 +141,7 @@ def get_full_current_metrics(
     # 计算汇率：预估当前数据提交后，汇率是多少
     # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
     # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
-    pre_calculate_exchange_rate = withdraw.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
+    pre_calculate_exchange_rate = pool.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
                                                                               full_metrics.activeValidatorBalance,
                                                                               full_metrics.withdrawalVaultBalance,
                                                                               full_metrics.exitedValidatorsCount)

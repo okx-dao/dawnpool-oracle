@@ -18,13 +18,11 @@ from prometheus_client import start_http_server
 from web3 import Web3
 from web3.exceptions import SolidityError, CannotHandleRequest, TimeExhausted
 
-
 from beacon import BeaconChainClient
 from log import init_log
 from metrics import compare_pool_metrics, get_previous_metrics, get_light_current_metrics, get_full_current_metrics
 from prometheus_metrics import metrics_exporter_state
 from state_proof import encode_proof_data
-
 
 init_log(stdout_level=os.environ.get('LOG_LEVEL_STDOUT', 'INFO'))
 logger = logging.getLogger()
@@ -65,7 +63,6 @@ DEFAULT_SLEEP = 60
 DEFAULT_COUNTDOWN_SLEEP = 10
 DEFAULT_GAS_LIMIT = 1_500_000
 
-
 prometheus_metrics_port = int(os.getenv('PROMETHEUS_METRICS_PORT', 8000))
 
 # 奖励库的地址
@@ -95,7 +92,6 @@ if not Web3.isChecksumAddress(burner_address):
 withdraw_address = os.environ['WITHDRAW_CONTRACT']
 if not Web3.isChecksumAddress(withdraw_address):
     withdraw_address = Web3.toChecksumAddress(withdraw_address)
-
 
 # 获取合约abi路径
 oracle_abi_path = os.path.join(ARTIFACTS_DIR, ORACLE_ARTIFACT_FILE)
@@ -180,7 +176,6 @@ with open(withdraw_abi_path, 'r') as file:
 abi = json.loads(a)
 withdraw = w3.eth.contract(abi=abi['abi'], address=withdraw_address)
 
-
 # Get Registry contract
 # registry_address = pool.functions.getOperators().call()
 # logger.info(f'{registry_address=}')
@@ -220,7 +215,6 @@ logging.info(f'SLEEP={SLEEP} s (pause between iterations in DAEMON mode)')
 logging.info(f'GAS_LIMIT={GAS_LIMIT} gas units')
 logging.info(f'POOL_CONTRACT={pool_address}')
 
-
 logging.info(f'Oracle contract address: {oracle_address} (auto-discovered)')
 logging.info(f'Registry contract address: {node_manager_address} (auto-discovered)')
 logging.info(f'Seconds per slot: {seconds_per_slot} (auto-discovered)')
@@ -229,10 +223,23 @@ logging.info(f'Epochs per frame: {epochs_per_frame} (auto-discovered)')
 logging.info(f'Genesis time: {genesis_time} (auto-discovered)')
 
 
-def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount, lastRequestIdToBeFulfilled, ethAmountToLock):  # hash tx
+def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount,
+                           lastRequestIdToBeFulfilled, ethAmountToLock):  # hash tx
     max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
+
+    data = {
+        'epochId': epoch,
+        'beaconBalance': balance,
+        'beaconValidators': validators,
+        'rewardsVaultBalance': rewardsBalance,
+        'exitedValidators': exitedValidatorsCount,
+        'burnedPEthAmount': burnedPethAmount,
+        'lastRequestIdToBeFulfilled': lastRequestIdToBeFulfilled,
+        'ethAmountToLock': ethAmountToLock
+    }
+
     # todo 金额位数修改
-    return oracle.functions.reportBeacon(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount, lastRequestIdToBeFulfilled, ethAmountToLock).buildTransaction(
+    return oracle.functions.reportBeacon(data).buildTransaction(
         {
             'from': account.address,
             'gas': GAS_LIMIT,
@@ -344,10 +351,10 @@ def update_beacon_data():
     if prev_metrics:
         logging.info(f'Previously reported epoch: {prev_metrics.epoch}')
         logging.info(
-            f'Previously reported beaconBalance: {prev_metrics.beaconBalance} wei or {prev_metrics.beaconBalance/1e18} ETH'
+            f'Previously reported beaconBalance: {prev_metrics.beaconBalance} wei or {prev_metrics.beaconBalance / 1e18} ETH'
         )
         logging.info(
-            f'Previously reported bufferedBalance: {prev_metrics.bufferedBalance} wei or {prev_metrics.bufferedBalance/1e18} ETH'
+            f'Previously reported bufferedBalance: {prev_metrics.bufferedBalance} wei or {prev_metrics.bufferedBalance / 1e18} ETH'
         )
         logging.info(f'Previous validator metrics: depositedValidators:{prev_metrics.depositedValidators}')
         logging.info(f'Previous validator metrics: transientValidators:{prev_metrics.getTransientValidators()}')
@@ -366,7 +373,7 @@ def update_beacon_data():
     )
 
     # 一天225个epoch 如果当前epoch <= 上次提交的epoch加一天 说明一天内已经提交过 不提交
-    if current_metrics.epoch <= (prev_metrics.epoch + 225):  # commit happens once per day
+    if current_metrics.epoch <= prev_metrics.epoch:  # commit happens once per day
         logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
         return
 
@@ -388,8 +395,10 @@ def update_beacon_data():
         try:
             metrics_exporter_state.reportableFrame.set(True)
             tx = build_report_beacon_tx(
-                current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators, current_metrics.rewardsVaultBalance,
-                current_metrics.exitedValidatorsCount, current_metrics.burnedPethAmount, current_metrics.lastRequestIdToBeFulfilled, current_metrics.ethAmountToLock)
+                current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators,
+                current_metrics.rewardsVaultBalance,
+                current_metrics.exitedValidatorsCount, current_metrics.burnedPethAmount,
+                current_metrics.lastRequestIdToBeFulfilled, current_metrics.ethAmountToLock)
             # Create the tx and execute it locally to check validity
             # logging.info(f'Calling tx: ', {tx})
             w3.eth.call(tx)
@@ -451,8 +460,6 @@ def update_beacon_data():
     else:
         logging.info('The tx hasn\'t been actually sent to the oracle contract! We are in DRY RUN mode')
         logging.info('Provide MEMBER_PRIV_KEY to be able to transact')
-
-
 
 
 def sleep():

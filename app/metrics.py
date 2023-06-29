@@ -142,9 +142,9 @@ def get_full_current_metrics(
     # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
     # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
     total_ether, total_peth = pool.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
-                                                                          full_metrics.activeValidatorBalance,
-                                                                          full_metrics.withdrawalVaultBalance,
-                                                                          full_metrics.exitedValidatorsCount)
+                                                                      full_metrics.activeValidatorBalance,
+                                                                      full_metrics.withdrawalVaultBalance,
+                                                                      full_metrics.exitedValidatorsCount)
     logging.info(f'Dawn pre_calculate_exchange_rate : {total_ether},{total_peth}')
     # 遍历数组  从1开始遍历
     for i in range(1, len(unfulfilled_withdraw_request_queue)):

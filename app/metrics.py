@@ -141,11 +141,11 @@ def get_full_current_metrics(
     # 计算汇率：预估当前数据提交后，汇率是多少
     # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
     # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
-    pre_calculate_exchange_rate = pool.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
-                                                                              full_metrics.activeValidatorBalance,
-                                                                              full_metrics.withdrawalVaultBalance,
-                                                                              full_metrics.exitedValidatorsCount)
-    logging.info(f'Dawn pre_calculate_exchange_rate : {pre_calculate_exchange_rate}')
+    total_ether, total_peth = pool.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
+                                                                          full_metrics.activeValidatorBalance,
+                                                                          full_metrics.withdrawalVaultBalance,
+                                                                          full_metrics.exitedValidatorsCount)
+    logging.info(f'Dawn pre_calculate_exchange_rate : {total_ether},{total_peth}')
     # 遍历数组  从1开始遍历
     for i in range(1, len(unfulfilled_withdraw_request_queue)):
         if len(unfulfilled_withdraw_request_queue) < 2:
@@ -158,7 +158,7 @@ def get_full_current_metrics(
         # 赎回的peth量
         peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
         # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
-        eth_amount2 = peth * pre_calculate_exchange_rate[0] / pre_calculate_exchange_rate[1]
+        eth_amount2 = peth * total_ether[0] / total_peth[1]
         actual_amount = min(eth_amount1, eth_amount2)
 
         if request_sum + actual_amount > buffered_ether + full_metrics.withdrawalVaultBalance:

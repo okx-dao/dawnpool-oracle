@@ -210,6 +210,8 @@ if force:
     logging.info('FORCE_DO_NOT_USE_IN_PRODUCTION=1 Running in enforced mode.')
     # 在强制模式下，TX 总是被发送，即使它看起来可疑。 切勿在生产中使用它！
     logging.warning("In enforced mode TX gets always sent even if it looks suspicious. NEVER use it in production!")
+else:
+    logging.info('FORCE_DO_NOT_USE_IN_PRODUCTION=0')
 
 logging.info(f'SLEEP={SLEEP} s (pause between iterations in DAEMON mode)')
 logging.info(f'GAS_LIMIT={GAS_LIMIT} gas units')

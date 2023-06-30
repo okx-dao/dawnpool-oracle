@@ -161,7 +161,7 @@ def get_full_current_metrics(
         # 赎回的peth量
         peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
         # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
-        eth_amount2 = peth * total_ether[0] / total_peth[1]
+        eth_amount2 = peth * total_ether / total_peth
         actual_amount = min(eth_amount1, eth_amount2)
 
         if request_sum + actual_amount > buffered_ether + full_metrics.withdrawalVaultBalance:
@@ -207,7 +207,7 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
 
     # 信标验证者数量意外减少
     if current.beaconValidators < previous.beaconValidators:
-        warnings = True
+        # warnings = True
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         logging.warning('The number of beacon validators unexpectedly decreased!')
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
@@ -264,19 +264,19 @@ def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
         logging.info(f'Daily staking reward rate for active validators: {daily_reward_rate * 100:.8f} %')
         logging.info(f'Staking APR for active validators: {apr * 100:.4f} %')
         if apr > current.MAX_APR:
-            warnings = True
+            # warnings = True
             logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             logging.warning('Staking APR too high! Talk to your fellow oracles before submitting!')
             logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
         if apr < current.MIN_APR:
-            warnings = True
+            # warnings = True
             logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             logging.warning('Staking APR too low! Talk to your fellow oracles before submitting!')
             logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
     else:
-        warnings = True
+        # warnings = True
         logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         logging.warning(f'Penalties will decrease totalPooledEther by {-reward} wei or {-reward / 1e18} ETH')
         logging.warning('Validators were either slashed or suffered penalties!')

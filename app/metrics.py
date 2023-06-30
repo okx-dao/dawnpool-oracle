@@ -34,7 +34,7 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     step = 1000
     for end in range(latest_block['number'], from_block, -step):
         start = max(end - step + 1, from_block)
-        # 调用了 getLogs 方法来读取区块链上合约中 Completed 事件在指定区块高度范围内的日志,日志会被存储在 events 变量中
+        # 调用了 getLogs 方法来读取区块链上合约中 Completed 事件在指定区块高度范围内的日志,日志会被存储在 events 变量中 todo
         events = oracle.events.Completed.getLogs(fromBlock=start, toBlock=end)
         # 判断 events 是否为空 如果存在符合条件的事件日志，获取最后一个事件，即 events[-1]，并从中提取出相应的信息
         if events:
@@ -176,6 +176,7 @@ def get_full_current_metrics(
             logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue  target_index: {i}, target_value: {target_value}')
             break
         target_index = len(unfulfilled_withdraw_request_queue) - 1
+        target_value = request_sum
 
     logging.info(f'Dawn request_sum : {request_sum}')
 

@@ -158,32 +158,36 @@ def get_full_current_metrics(
         # uint256 createdTime; bool claimed; }
         # 赎回请求时汇率计算得到的ether
         eth_amount1 = unfulfilled_withdraw_request_queue[i][2] - unfulfilled_withdraw_request_queue[i - 1][2]
+        logging.info(f'Dawn eth_amount1 : {eth_amount1}')
         # 赎回的peth量
         peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
+        logging.info(f'Dawn peth : {peth}')
         # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
         eth_amount2 = peth * total_ether / total_peth
+        logging.info(f'Dawn eth_amount2 : {eth_amount2}')
         actual_amount = min(eth_amount1, eth_amount2)
+        logging.info(f'Dawn actual_amount : {actual_amount}')
 
-        if request_sum + actual_amount > buffered_ether + full_metrics.withdrawalVaultBalance:
+        request_sum += actual_amount
+
+        if request_sum > buffered_ether + full_metrics.withdrawalVaultBalance:
             target_index = i - 1
             target_value = request_sum
             logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue  target_index: {i}, target_value: {target_value}')
             break
-        request_sum += actual_amount
+        target_index = len(unfulfilled_withdraw_request_queue) - 1
+
+    logging.info(f'Dawn request_sum : {request_sum}')
 
     # returns (uint256 lastFulfillmentRequestId, uint256 lastRequestId, uint256 lastCheckpointIndex);
     withdraw_queue_stat = withdraw.functions.getWithdrawQueueStat().call()
+    logging.info(f'Dawn withdraw_queue_stat : {withdraw_queue_stat[0]},{withdraw_queue_stat[1]},{withdraw_queue_stat[2]}')
+
     latest_index = withdraw_queue_stat[0] + target_index
 
     full_metrics.lastRequestIdToBeFulfilled = latest_index
     full_metrics.ethAmountToLock = target_value
-
-    # if full_metrics.epoch >= int(consider_withdrawals_from_epoch):
-    #     full_metrics.beaconBalance = corrected_balance
-    #     logging.info('Corrected balance on Beacon is accounted')
-    # else:
-    #     remaining = int(consider_withdrawals_from_epoch) - full_metrics.epoch
-    #     logging.info(f'Corrected balance on Beacon is NOT accounted yet. Remaining epochs before account: {remaining}')
+    logging.info(f'Dawn latest_index : {latest_index},target_value: {target_value}, ')
 
     logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics

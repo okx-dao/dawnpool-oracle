@@ -168,13 +168,12 @@ def get_full_current_metrics(
         actual_amount = min(eth_amount1, eth_amount2)
         logging.info(f'Dawn actual_amount : {actual_amount}')
 
-        request_sum += actual_amount
-
-        if request_sum > buffered_ether + full_metrics.withdrawalVaultBalance:
+        if request_sum + actual_amount > buffered_ether + full_metrics.withdrawalVaultBalance:
             target_index = i - 1
             target_value = request_sum
             logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue  target_index: {i}, target_value: {target_value}')
             break
+        request_sum += actual_amount
         target_index = len(unfulfilled_withdraw_request_queue) - 1
         target_value = request_sum
 

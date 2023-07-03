@@ -208,7 +208,7 @@ class LidoValidatorStateService:
 
         dawn_pool_exiting_list = []
         # 最近请求退出验证者的事件 event SigningKeyExiting(uint256 indexed validatorId, address indexed operator, bytes pubkey);
-        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExiting.getLogs()
+        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExit.getLogs()
         for event in exiting_events:
             dawn_pool_exiting_list.append(DawnPoolValidator(event.pubkey, event.validatorId, event.operator))
         #     ToDo 根据pubkey去链上查询状态 共识层拿数据

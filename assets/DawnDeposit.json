@@ -11,6 +11,122 @@
     "type": "constructor"
   },
   {
+    "inputs": [],
+    "name": "BufferedEtherNotEnough",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      }
+    ],
+    "name": "CallerAuthFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "burnedPEthAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "burnerBalance",
+        "type": "uint256"
+      }
+    ],
+    "name": "ErrorBurnedPEthAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "ethAmountToLock",
+        "type": "uint256"
+      }
+    ],
+    "name": "InvalidLockEth",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "beaconValidators",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "exitedValidators",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "depositedValidators",
+        "type": "uint256"
+      }
+    ],
+    "name": "InvalidValidators",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "nodeAddress",
+        "type": "address"
+      }
+    ],
+    "name": "NodeOperatorInactive",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PEthNotEnough",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "from",
+        "type": "address"
+      }
+    ],
+    "name": "ReceiveNotFromInsurance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RewardsVaultBalanceNotEnough",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "StakeZeroEther",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Unprofitable",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroBurnAmount",
+    "type": "error"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -66,6 +182,56 @@
       {
         "indexed": false,
         "internalType": "address",
+        "name": "burnAddress",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "ethAmountToDecrease",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogDecreaseEther",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "epochId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "preCLBalance",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "postCLBalance",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "rewardsVaultBalance",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogETHRewards",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
         "name": "operator",
         "type": "address"
       },
@@ -83,6 +249,25 @@
       }
     ],
     "name": "LogPreActivateValidator",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "burnAddress",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "pethAmountToBurn",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogPunish",
     "type": "event"
   },
   {
@@ -134,6 +319,43 @@
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "epochId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "preTotalEther",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "preTotalPEth",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "postTotalEther",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "postTotalPEth",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogTokenRebase",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "address",
         "name": "from",
@@ -157,51 +379,12 @@
   },
   {
     "inputs": [],
-    "name": "DEPOSIT_VALUE_PER_VALIDATOR",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "DOMAIN_SEPARATOR",
     "outputs": [
       {
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "POST_DEPOSIT_VALUE",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "PRE_DEPOSIT_VALUE",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -340,6 +523,11 @@
     "outputs": [
       {
         "internalType": "uint256",
+        "name": "preDepositValidators",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
         "name": "depositedValidators",
         "type": "uint256"
       },
@@ -459,6 +647,21 @@
       {
         "internalType": "uint256",
         "name": "exitedValidators",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "burnedPEthAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lastRequestIdToBeFulfilled",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ethAmountToLock",
         "type": "uint256"
       }
     ],
@@ -593,6 +796,86 @@
     "inputs": [
       {
         "internalType": "uint256",
+        "name": "beaconValidators",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "beaconBalance",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "availableRewards",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "exitedValidators",
+        "type": "uint256"
+      }
+    ],
+    "name": "preCalculateExchangeRate",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "totalEther",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalPEth",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "burnAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "pethAmountToBurn",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ethAmountToDecrease",
+        "type": "uint256"
+      }
+    ],
+    "name": "punish",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "burnAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "pethAmountToBurn",
+        "type": "uint256"
+      }
+    ],
+    "name": "punish",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
         "name": "pEthAmount",
         "type": "uint256"
       }
@@ -696,25 +979,6 @@
         "internalType": "bool",
         "name": "",
         "type": "bool"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "pEthAmount",
-        "type": "uint256"
-      }
-    ],
-    "name": "unstake",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "nonpayable",

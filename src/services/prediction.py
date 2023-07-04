@@ -68,7 +68,8 @@ class RewardsPredictionService:
 
         total_rewards = 0
         # event LogETHRewards(uint256 epochId, uint256 preCLBalance, uint256 postCLBalance, uint256 rewardsVaultBalance);
-        eth_rewards_events = self.w3.lido_contracts.pool.events.LogETHRewards.getLogs()
+        eth_rewards_events = self.w3.lido_contracts.pool.events.LogETHRewards.get_logs()
+        logger.info({'msg': 'Fetch eth rewards events.', 'value': eth_rewards_events})
 
         if not eth_rewards_events:
             return Wei(0)

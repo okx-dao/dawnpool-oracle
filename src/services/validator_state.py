@@ -199,8 +199,7 @@ class LidoValidatorStateService:
     def get_recently_requested_but_not_exited_validators(
             self,
             blockstamp: ReferenceBlockStamp,
-            chain_config: ChainConfig,
-            registry: Contract
+            chain_config: ChainConfig
     ) -> list[DawnPoolValidator]:
 
         # 获取所有验证者列表
@@ -208,7 +207,8 @@ class LidoValidatorStateService:
 
         dawn_pool_exiting_list = []
         # 最近请求退出验证者的事件 event SigningKeyExiting(uint256 indexed validatorId, address indexed operator, bytes pubkey);
-        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExit.getLogs()
+        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExit.get_logs()
+        logger.info({'msg': 'Fetch exiting events.', 'value': exiting_events})
         for event in exiting_events:
             dawn_pool_exiting_list.append(DawnPoolValidator(event.pubkey, event.validatorId, event.operator))
         #     ToDo 根据pubkey去链上查询状态 共识层拿数据

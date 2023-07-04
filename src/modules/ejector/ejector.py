@@ -176,7 +176,7 @@ class Ejector(BaseModule, ConsensusModule):
     def get_validators_to_eject(self, blockstamp: ReferenceBlockStamp) -> int:
         # 所有未完成提现请求的总金额(需要退出的数量)，它将被用于计算可退出验证人的余额。 ToDo 调withdraw合约拿
         to_withdraw_amount = self.w3.lido_contracts.withdraw.functions.getUnfulfilledTotalEth().call(block_identifier=blockstamp.block_hash)
-        # to_withdraw_amount = self.get_total_unfinalized_withdrawal_requests_amount(blockstamp)
+        # to_withdraw_amount = 1
         logger.info({'msg': 'Calculate to withdraw amount.', 'value': to_withdraw_amount})
 
         # 可退出验证人的总余额（Wei）
@@ -187,21 +187,28 @@ class Ejector(BaseModule, ConsensusModule):
         # 获取给定块的链配置对象 slotsPerEpoch：每个纪元中的 slot 数量(32)； secondsPerSlot：每个 slot 的时长（12秒）；genesisTime：链的创世时间（Unix 时间戳）todo 通过HashConsensus合约获取()
         #  chain_config = self.get_chain_config(blockstamp)
         chain_config = self.w3.lido_contracts.validators_exit_bus_oracle.functions.getChainConfig().call()
+        logger.info({'msg': 'Fetch chain config.', 'value': chain_config})
         # 每个 epoch 中，每个验证人可以获得多少奖励。 todo 通过上报事件平均值计算
         rewards_speed_per_epoch = self.prediction_service.get_rewards_per_epoch(blockstamp, chain_config)
         logger.info({'msg': 'Calculate average rewards speed per epoch.', 'value': rewards_speed_per_epoch})
         # 计算需要多少个 epoch 才能处理完链上所有需要进行提款的验证人 todo 查询链上数据获取 可以复用
         epochs_to_sweep = self._get_sweep_delay_in_epochs(blockstamp)
+        # epochs_to_sweep = 1
         logger.info({'msg': 'Calculate epochs to sweep.', 'value': epochs_to_sweep})
 
-        #  获取指定块上当前可用的ETH总余额 todo 奖励库金额 + 合约中的 ETH 缓冲余额
-        total_available_balance = w3.eth.get_balance(
+        # 奖励库金额
+        rewards_balance = w3.eth.get_balance(
             w3.to_checksum_address(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
-            block_identifier=blockstamp.blockNumber
-        ) + self.w3.lido_contracts.pool.functions.getBufferedEther().call()
-        logger.info({'msg': 'Calculate total_available_balance.', 'value': total_available_balance})
+            block_identifier=blockstamp.block_number
+        )
+        # 合约中的 ETH 缓冲余额
+        buffered_ether = self.w3.lido_contracts.pool.functions.getBufferedEther().call()
+        # 获取指定块上当前可用的ETH总余额 = 奖励库金额 + 合约中的 ETH 缓冲余额
+        total_available_balance = rewards_balance + buffered_ether
+        logger.info({'msg': 'Calculate total_available_balance.', 'value': total_available_balance,
+                     'rewards_balance': rewards_balance, 'buffered_ether': buffered_ether})
 
-         # total_available_balance = self._get_total_el_balance(blockstamp)
+        # total_available_balance = self._get_total_el_balance(blockstamp)
         logger.info({'msg': 'Calculate el balance.', 'value': total_available_balance})
         # 获取最近提交了退出请求但尚未退出的验证人列表 todo
         validators_going_to_exit = self.validators_state_service.get_recently_requested_but_not_exited_validators(blockstamp, chain_config)

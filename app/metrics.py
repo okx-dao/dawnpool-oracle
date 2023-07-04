@@ -123,10 +123,6 @@ def get_full_current_metrics(
     )
     logging.info(f'DawnPool the balance of the reward pool address : {full_metrics.rewardsVaultBalance}')
 
-    # 新增获取燃币金额 todo
-    full_metrics.burnedPethAmount = burner.functions.getPEthBurnRequest().call()
-    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount}')
-
     # 获取lastRequestIdToBeFulfilled和ethAmountToLock todo
     buffered_ether = pool.functions.getBufferedEther().call()
     # 返回数组切片 returns (WithdrawRequest[] memory unfulfilledWithdrawRequestQueue)
@@ -188,6 +184,10 @@ def get_full_current_metrics(
     full_metrics.lastRequestIdToBeFulfilled = latest_index
     full_metrics.ethAmountToLock = target_value
     logging.info(f'Dawn latest_index : {latest_index},target_value: {target_value}, ')
+
+    # 获取燃币金额 todo
+    full_metrics.burnedPethAmount = burner.functions.getPEthBurnRequest().call() + unfulfilled_withdraw_request_queue[target_index][1] - unfulfilled_withdraw_request_queue[0][1]
+    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount}')
 
     logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics

@@ -186,8 +186,10 @@ def get_full_current_metrics(
     logging.info(f'Dawn latest_index : {latest_index},target_value: {target_value}, ')
 
     # 获取燃币金额 todo
-    full_metrics.burnedPethAmount = burner.functions.getPEthBurnRequest().call() + unfulfilled_withdraw_request_queue[target_index][1] - unfulfilled_withdraw_request_queue[0][1]
-    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount}')
+    burner_contract_to_burned = burner.functions.getPEthBurnRequest().call()
+    withdraw_to_burned = unfulfilled_withdraw_request_queue[target_index][1] - unfulfilled_withdraw_request_queue[0][1]
+    full_metrics.burnedPethAmount = burner_contract_to_burned + withdraw_to_burned
+    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount},burner_contract_to_burned:{burner_contract_to_burned},withdraw_to_burned:{withdraw_to_burned}')
 
     logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics

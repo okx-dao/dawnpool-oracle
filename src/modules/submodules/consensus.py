@@ -294,11 +294,11 @@ class ConsensusModule(ABC):
         logger.info({'msg': 'Calculate report hash.', 'value': report_hash})
         # We need to check whether report has unexpected data before sending.
         # otherwise we have to check it manually.
-        if not self.is_reporting_allowed(blockstamp):
-            logger.warning({'msg': 'Reporting checks are not passed. Report will not be sent.'})
-            return
+        # if not self.is_reporting_allowed(blockstamp):
+        #     logger.warning({'msg': 'Reporting checks are not passed. Report will not be sent.'})
+        #     return
 
-        self._process_report_hash(blockstamp, report_hash)
+        # self._process_report_hash(blockstamp, report_hash)
         # Even if report hash transaction was failed we have to check if we can report data for current frame
         self._process_report_data(blockstamp, report_data, report_hash)
 
@@ -330,50 +330,53 @@ class ConsensusModule(ABC):
 
     # todo 上报给ValidatorsExitBusOracle合约
     def _process_report_data(self, blockstamp: ReferenceBlockStamp, report_data: tuple, report_hash: HexBytes):
-        latest_blockstamp, member_info = self._get_latest_data()
+        # latest_blockstamp, member_info = self._get_latest_data()
 
-        if member_info.current_frame_consensus_report == ZERO_HASH:
-            logger.info({'msg': 'Quorum is not ready.'})
-            return
+        latest_blockstamp = self._get_latest_blockstamp()
+        logger.info({'msg': f'latestBlockStamp {latest_blockstamp} '})
 
-        if HexBytes(member_info.current_frame_consensus_report) != report_hash:
-            msg = 'Oracle`s hash differs from consensus report hash.'
-            logger.error({
-                'msg': msg,
-                'consensus_report_hash': str(HexBytes(member_info.current_frame_consensus_report)),
-                'report_hash': str(report_hash),
-            })
-            return
+        # if member_info.current_frame_consensus_report == ZERO_HASH:
+        #     logger.info({'msg': 'Quorum is not ready.'})
+        #     return
 
-        if self.is_main_data_submitted(latest_blockstamp):
-            logger.info({'msg': 'Main data already submitted.'})
-            return
+        # if HexBytes(member_info.current_frame_consensus_report) != report_hash:
+        #     msg = 'Oracle`s hash differs from consensus report hash.'
+        #     logger.error({
+        #         'msg': msg,
+        #         'consensus_report_hash': str(HexBytes(member_info.current_frame_consensus_report)),
+        #         'report_hash': str(report_hash),
+        #     })
+        #     return
+
+        # if self.is_main_data_submitted(latest_blockstamp):
+        #     logger.info({'msg': 'Main data already submitted.'})
+        #     return
 
         # Fast lane offchain implementation for report data
         # If the member was added in the current frame,
         # the result of _get_slot_delay_before_data_submit may be inconsistent for different latest blocks, but it's ok.
         # We can't use ref blockstamp here because new oracle member will fail is_member check,
         # because it wasn't in quorum on ref_slot
-        slots_to_sleep = self._get_slot_delay_before_data_submit(latest_blockstamp)
-        if slots_to_sleep:
-            chain_configs = self.get_chain_config(blockstamp)
+        # slots_to_sleep = self._get_slot_delay_before_data_submit(latest_blockstamp)
+        # if slots_to_sleep:
+        #     chain_configs = self.get_chain_config(blockstamp)
+        #
+        #     logger.info({'msg': f'Sleep for {slots_to_sleep} slots before sending data.'})
+        #     for _ in range(slots_to_sleep):
+        #         sleep(chain_configs.seconds_per_slot)
 
-            logger.info({'msg': f'Sleep for {slots_to_sleep} slots before sending data.'})
-            for _ in range(slots_to_sleep):
-                sleep(chain_configs.seconds_per_slot)
+                # latest_blockstamp, member_info = self._get_latest_data()
+                # if self.is_main_data_submitted(latest_blockstamp):
+                #     logger.info({'msg': 'Main data already submitted.'})
+                #     return
 
-                latest_blockstamp, member_info = self._get_latest_data()
-                if self.is_main_data_submitted(latest_blockstamp):
-                    logger.info({'msg': 'Main data already submitted.'})
-                    return
+        # if self.is_main_data_submitted(latest_blockstamp):
+        #     logger.info({'msg': 'Main data already submitted.'})
+        #     return
 
-        if self.is_main_data_submitted(latest_blockstamp):
-            logger.info({'msg': 'Main data already submitted.'})
-            return
-
-        logger.info({'msg': f'Send report data. Contract version: [{self.CONTRACT_VERSION}]'})
+        # logger.info({'msg': f'Send report data. Contract version: [{self.CONTRACT_VERSION}]'})
         # If data already submitted transaction will be locally reverted, no need to check status manually
-        self._submit_report(report_data, self.CONTRACT_VERSION)
+        self._submit_report(report_data)
 
     def _get_latest_data(self) -> tuple[BlockStamp, MemberInfo]:
         latest_blockstamp = self._get_latest_blockstamp()
@@ -423,8 +426,8 @@ class ConsensusModule(ABC):
 
         self.w3.transaction.check_and_send_transaction(tx, variables.ACCOUNT)
 
-    def _submit_report(self, report: tuple, contract_version: int):
-        tx = self.report_contract.functions.submitReportData(report, contract_version)
+    def _submit_report(self, report: tuple):
+        tx = self.report_contract.functions.submitReportData(report)
 
         self.w3.transaction.check_and_send_transaction(tx, variables.ACCOUNT)
 

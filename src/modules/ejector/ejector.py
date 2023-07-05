@@ -163,7 +163,7 @@ class Ejector(BaseModule, ConsensusModule):
         # data, data_format = encode_data(validators)
 
         report_data = ReportEjectData(
-            blockstamp.ref_slot,
+            blockstamp.ref_epoch,
             eject_count,
         )
 
@@ -176,7 +176,6 @@ class Ejector(BaseModule, ConsensusModule):
     def get_validators_to_eject(self, blockstamp: ReferenceBlockStamp) -> int:
         # 所有未完成提现请求的总金额(需要退出的数量)，它将被用于计算可退出验证人的余额。 ToDo 调withdraw合约拿
         to_withdraw_amount = self.w3.lido_contracts.withdraw.functions.getUnfulfilledTotalEth().call(block_identifier=blockstamp.block_hash)
-        # to_withdraw_amount = 1
         logger.info({'msg': 'Calculate to withdraw amount.', 'value': to_withdraw_amount})
 
         # 可退出验证人的总余额（Wei）

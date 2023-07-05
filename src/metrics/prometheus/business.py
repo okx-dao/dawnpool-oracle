@@ -33,6 +33,12 @@ FRAME_PREV_REPORT_REF_SLOT = Gauge(
     namespace=PROMETHEUS_PREFIX,
 )
 
+FRAME_PREV_REPORT_REF_EPOCH = Gauge(
+    "frame_prev_report_ref_epoch",
+    "Oracle frame previous report ref epoch",
+    namespace=PROMETHEUS_PREFIX,
+)
+
 CONTRACT_ON_PAUSE = Gauge(
     "contract_on_pause",
     "Contract on pause",

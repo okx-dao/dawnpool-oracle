@@ -8,7 +8,6 @@ from src.typings import ReferenceBlockStamp
 from src.utils.events import get_events_in_past
 from src.web3py.typings import Web3
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -19,14 +18,15 @@ class RewardsPredictionService:
     **Note** Withdraw amount in Oracle report is limited, so prediction shows not actual Lido rewards, but medium.
     amount of ETH that were withdrawn in Oracle reports.
     """
+
     def __init__(self, w3: Web3):
         self.w3 = w3
 
     # 根据当前 epoch 的链配置信息和计算出来的总奖励金额，计算出每个验证人可以获得的奖励速度。
     def get_rewards_per_epoch(
-        self,
-        blockstamp: ReferenceBlockStamp,
-        chain_configs: ChainConfig,
+            self,
+            blockstamp: ReferenceBlockStamp,
+            chain_configs: ChainConfig,
     ) -> Wei:
 
         # 获取预测周期的时间戳数量
@@ -65,10 +65,14 @@ class RewardsPredictionService:
 
         #     time_spent += event['timeElapsed']
 
-
         total_rewards = 0
         # event LogETHRewards(uint256 epochId, uint256 preCLBalance, uint256 postCLBalance, uint256 rewardsVaultBalance);
-        eth_rewards_events = self.w3.lido_contracts.pool.events.LogETHRewards.get_logs()
+        # todo 计算fromBlock
+
+        eth_rewards_events = self.w3.lido_contracts.pool.events.LogETHRewards.get_logs(
+            fromBlock=8717848,
+            toBlock='latest',
+        )
         logger.info({'msg': 'Fetch eth rewards events.', 'value': eth_rewards_events})
 
         if not eth_rewards_events:
@@ -76,21 +80,26 @@ class RewardsPredictionService:
 
         if len(eth_rewards_events) > 7:
             # 使用 sorted() 函数对数组 eth_rewards_events 进行排序，通过 key 参数指定按照 epochId 字段进行排序,设置 reverse=True 参数来实现降序排序
-            sorted_array = sorted(eth_rewards_events, key=lambda x: x.epochId, reverse=True)
+            # sorted_array = sorted(eth_rewards_events, key=lambda x: x.epochId, reverse=True)
             # 使用切片操作 [:7] 取出排序后的前 7 个元素
-            eth_rewards_events = sorted_array[:7]
+            eth_rewards_events = eth_rewards_events[-7:]
 
         #  拿到最大和最小的epochId 相减得到 time_spent
-        max_epoch_id = max(eth_rewards_events, key=lambda x: x['epochId'])['epochId']
-        min_epoch_id = min(eth_rewards_events, key=lambda x: x['epochId'])['epochId']
+        # max_epoch_id = max(eth_rewards_events, key=lambda x: x['epochId'])['epochId']
+        # min_epoch_id = min(eth_rewards_events, key=lambda x: x['epochId'])['epochId']
 
-        time_spent = max_epoch_id - min_epoch_id
+        max_epoch_id = eth_rewards_events[-1]['args']['epochId']
+        min_epoch_id = eth_rewards_events[0]['args']['epochId']
+
+        logger.info({'msg': 'Fetch eth rewards events.', 'max_epoch_id': max_epoch_id, 'min_epoch_id': min_epoch_id})
+
+        time_spent = max_epoch_id - min_epoch_id + chain_configs.epochsPerFrame
 
         for event in eth_rewards_events:
-            total_rewards += event['postCLBalance'] + event['rewardVault'] - event['preCLBalance']
+            total_rewards += event['args']['postCLBalance'] + event['args']['rewardsVaultBalance'] - event['args']['preCLBalance']
 
         return max(
-            Wei(total_rewards * chain_configs.seconds_per_slot * chain_configs.slots_per_epoch // time_spent),
+            Wei(total_rewards * chain_configs.secondsPerSlot * chain_configs.slotsPerEpoch // time_spent),
             Wei(0),
         )
 

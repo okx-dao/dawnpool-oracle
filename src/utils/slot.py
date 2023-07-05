@@ -63,10 +63,12 @@ def get_first_non_missed_slot(
     #  Exception case can be when all slots are missed in range [ref_slot, last_finalized_slot_number] it will mean that
     #  block response of CL node contradicts itself, because few moments ago we got existed `last_finalized_slot_number`
 
+    logger.info({'msg': f'Get BlockStamp for current ref_slot: {slot}.'})
+
     if slot > last_finalized_slot_number:
         raise ValueError('ref_slot should be less or equal to the last finalized slot_number.')
 
-    logger.info({'msg': f'Get Blockstamp for ref slot: {slot}.'})
+    logger.info({'msg': f'Get BlockStamp for ref slot: {slot}.'})
 
     ref_slot_is_missed = False
     existed_header = None

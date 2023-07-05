@@ -10,7 +10,7 @@ from web3.module import Module
 from web3.types import Wei
 
 from src import variables
-from src.metrics.prometheus.business import FRAME_PREV_REPORT_REF_SLOT
+from src.metrics.prometheus.business import FRAME_PREV_REPORT_REF_SLOT, FRAME_PREV_REPORT_REF_EPOCH
 from src.typings import BlockStamp, SlotNumber
 from src.utils.cache import global_lru_cache as lru_cache
 
@@ -227,4 +227,14 @@ class LidoContracts(Module):
         )
         logger.info({'msg': f'Ejector last processing ref slot {result}'})
         FRAME_PREV_REPORT_REF_SLOT.set(result)
+        return result
+
+
+    def get_ejector_last_processing_ref_epoch(self, blockstamp: BlockStamp) -> SlotNumber:
+
+        result = self.w3.lido_contracts.validators_exit_bus_oracle.functions.getLastProcessingRefSlot().call(
+            block_identifier=blockstamp.block_hash
+        )
+        logger.info({'msg': f'Ejector last processing ref epoch {result}'})
+        FRAME_PREV_REPORT_REF_EPOCH.set(result)
         return result

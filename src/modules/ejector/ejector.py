@@ -17,7 +17,7 @@ from src.constants import (
     MIN_PER_EPOCH_CHURN_LIMIT,
     MIN_VALIDATOR_WITHDRAWABILITY_DELAY,
 )
-from src.metrics.prometheus.business import CONTRACT_ON_PAUSE, FRAME_PREV_REPORT_REF_SLOT
+from src.metrics.prometheus.business import CONTRACT_ON_PAUSE, FRAME_PREV_REPORT_REF_SLOT, FRAME_PREV_REPORT_REF_EPOCH
 from src.metrics.prometheus.ejector import (
     EJECTOR_VALIDATORS_COUNT_TO_EJECT,
     EJECTOR_TO_WITHDRAW_WEI_AMOUNT,
@@ -153,8 +153,11 @@ class Ejector(BaseModule, ConsensusModule):
     @lru_cache(maxsize=1)
     @duration_meter()
     def build_report(self, blockstamp: ReferenceBlockStamp) -> tuple:
-        last_report_ref_slot = self.w3.lido_contracts.get_ejector_last_processing_ref_slot(blockstamp)
-        FRAME_PREV_REPORT_REF_SLOT.set(last_report_ref_slot)
+        # last_report_ref_slot = self.w3.lido_contracts.get_ejector_last_processing_ref_slot(blockstamp)
+        # FRAME_PREV_REPORT_REF_SLOT.set(last_report_ref_slot)
+        last_report_ref_epoch = self.w3.lido_contracts.get_ejector_last_processing_ref_epoch(blockstamp)
+        FRAME_PREV_REPORT_REF_EPOCH.set(last_report_ref_epoch)
+        logger.info({'msg': 'build_report last_report_ref_epoch', 'value': last_report_ref_epoch})
         eject_count: int = self.get_validators_to_eject(blockstamp)
         logger.info({
             'msg': f'Calculate validators to eject. Count: {eject_count}'},

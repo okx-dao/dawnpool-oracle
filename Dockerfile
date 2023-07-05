@@ -1,12 +1,10 @@
 FROM python:3.11-slim as base
 
-RUN apt-get update && apt-get install -y --no-install-recommends -qq \
-    gcc=4:10.2.1-1 \
-    libffi-dev=3.3-6 \
-    g++=4:10.2.1-1 \
-    curl=7.74.0-1.3+deb11u7 \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y vim wget net-tools curl git gcc libffi-dev g++ \
+    && curl --version \
+    && git --version \
+    && apt-get clean
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -21,7 +19,7 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 
 FROM base as builder
 
-ENV POETRY_VERSION=1.3.2
+ENV POETRY_VERSION=1.4.2
 RUN pip install --no-cache-dir poetry==$POETRY_VERSION
 
 WORKDIR /

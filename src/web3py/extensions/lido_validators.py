@@ -1,4 +1,6 @@
 import logging
+import binascii
+
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, NewType, Tuple, Optional
 
@@ -13,13 +15,10 @@ from src.typings import BlockStamp
 from src.utils.dataclass import Nested, list_of_dataclasses
 from src.utils.cache import global_lru_cache as lru_cache
 
-
 logger = logging.getLogger(__name__)
-
 
 if TYPE_CHECKING:
     from src.web3py.typings import Web3  # pragma: no cover
-
 
 StakingModuleId = NewType('StakingModuleId', int)
 NodeOperatorId = NewType('NodeOperatorId', int)
@@ -97,6 +96,7 @@ class NodeOperator(Nested):
 class LidoValidator(Validator):
     lido_id: LidoKey
 
+
 @dataclass
 class DawnPoolValidator(Validator):
     dawnpool_id: DawnPoolKey
@@ -134,18 +134,47 @@ class LidoValidatorsProvider(Module):
     def get_dawn_pool_validators(self, blockstamp: BlockStamp) -> list[DawnPoolValidator]:
         # 通过我们合约获取所有pub_keys todo
         dawn_pool_keys = self.w3.lido_contracts.registry.functions.getNodeValidators(0, 0).call()[1]
-        logger.info({'msg': 'Fetch dawn pool keys.', 'value': dawn_pool_keys.decode('utf-8')})
-        validators = self.w3.cc.get_pub_key_validators(blockstamp, dawn_pool_keys)
 
-        return self.merge_dawn_pool_validators_with_keys(dawn_pool_keys, validators)
+        hex_keys = tuple('0x' + binascii.hexlify(pk).decode('ascii') for pk in dawn_pool_keys)
+        logger.info({'msg': 'Fetch dawn pool keys.', 'value': hex_keys})
+
+        validators = self.w3.cc.get_pub_key_validators(blockstamp, hex_keys)
+
+        logger.info({'msg': 'Fetch dawn pool validators.', 'value': validators})
+        return self.merge_dawn_pool_validators_with_keys(validators, hex_keys)
+
+    # @lru_cache(maxsize=1)
+    # def get_dawn_pool_validators_by_keys(self, blockstamp: BlockStamp, pub_keys: Optional[str | tuple] = None) -> list[DawnPoolValidator]:
+    #     logger.info({'msg': 'Fetch dawn pool validators pub_keys.', 'value': pub_keys})
+    #     validators = self.w3.cc.get_pub_key_validators(blockstamp, pub_keys)
+    #     logger.info({'msg': 'Fetch dawn_pool_validators_by_keys.', 'value': validators})
+    #     return self.merge_dawn_pool_validators_with_keys(pub_keys, validators)
 
     @lru_cache(maxsize=1)
-    def get_dawn_pool_validators_by_keys(self, blockstamp: BlockStamp, pub_keys: Optional[str | tuple] = None) -> list[DawnPoolValidator]:
-        # 通过我们合约获取所有pub_keys todo
-        validators = self.w3.cc.get_pub_key_validators(blockstamp, pub_keys)
+    def get_dawn_pool_validators_by_keys(self, blockstamp: BlockStamp) -> list[
+        DawnPoolValidator]:
 
-        return self.merge_dawn_pool_validators_with_keys(pub_keys, validators)
+        # function getNodeValidators(uint256 startIndex, uint256 amount) external view returns (address[] memory operators, bytes[] memory pubkeys, ValidatorStatus[] memory statuses);
+        node_validators = self.w3.lido_contracts.registry.functions.getNodeValidators(0, 0).call()
 
+        logger.info({'msg': 'node_validators.', 'value': node_validators})
+        # 使用列表解析来查找验证者状态为VALIDATING并生成包含目标元素索引的新列表
+        index_status_list = [index for index in range(len(node_validators[2])) if node_validators[2][index] == 2]
+        validators_list = []
+        # 可以退出的验证人列表(遍历状态为VALIDATING的验证者数组,得到状态为VALIDATING的验证者数组)
+        for index in index_status_list:
+            validators_list.append(node_validators[1][index])
+
+        logger.info(
+            {'msg': 'Fetch dawn pool validators pub_keys.', 'len': len(index_status_list), 'value': index_status_list})
+
+        hex_status_keys = tuple('0x' + binascii.hexlify(pk).decode('ascii') for pk in validators_list)
+        logger.info({'msg': 'Fetch dawn pool status keys.', 'value': hex_status_keys})
+
+        validators = self.w3.cc.get_pub_key_validators(blockstamp, hex_status_keys)
+
+        logger.info({'msg': 'Fetch dawn_pool_validators_by_keys.', 'value': validators})
+        return self.merge_dawn_pool_validators_with_keys(validators, hex_status_keys)
 
     @staticmethod
     def merge_validators_with_keys(keys: list[LidoKey], validators: list[Validator]) -> list[LidoValidator]:
@@ -164,19 +193,24 @@ class LidoValidatorsProvider(Module):
         return lido_validators
 
     @staticmethod
-    def merge_dawn_pool_validators_with_keys(keys: list[DawnPoolKey], validators: list[Validator]) -> list[DawnPoolValidator]:
+    def merge_dawn_pool_validators_with_keys(validators: list[Validator], keys: Optional[str | tuple] = None) -> list[
+        DawnPoolValidator]:
         """Merging and filter non-lido validators."""
-        validators_keys_dict = {validator.validator.pubkey: validator for validator in validators}
 
+        logger.info({'msg': 'Fetch merge_dawn_pool_validators_with_keys.', 'value': keys})
+        validators_keys_dict = {validator.validator.pubkey: validator for validator in validators}
+        logger.info({'msg': 'Fetch validators_keys_dict.', 'value': validators_keys_dict})
         dawn_pool_validators = []
 
         for key in keys:
-            if key.key in validators_keys_dict:
+            logger.info({'msg': 'Fetch merge_dawn_pool_validators_with_keys key.', 'value': key})
+            if key in validators_keys_dict:
                 dawn_pool_validators.append(DawnPoolValidator(
-                    dawnpool_id=key,
-                    **asdict(validators_keys_dict[key.key]),
+                    dawnpool_id=DawnPoolKey(key, 0, '0x00'),
+                    **asdict(validators_keys_dict[key]),
                 ))
 
+        logger.info({'msg': 'Fetch dawn_pool_validators.', 'value': dawn_pool_validators})
         return dawn_pool_validators
 
     @lru_cache(maxsize=1)

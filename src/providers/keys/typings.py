@@ -13,6 +13,7 @@ class LidoKey(FromResponse):
     used: bool
     moduleAddress: ChecksumAddress
 
+
 # event SigningKeyExiting(uint256 indexed validatorId, address indexed operator, bytes pubkey);
 @dataclass
 class DawnPoolKey(FromResponse):

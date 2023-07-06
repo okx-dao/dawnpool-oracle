@@ -1,3 +1,4 @@
+import binascii
 import logging
 import os
 import json
@@ -195,7 +196,7 @@ class Ejector(BaseModule, ConsensusModule):
         logger.info({'msg': 'Calculate average rewards speed per epoch.', 'value': rewards_speed_per_epoch})
         # 计算需要多少个 epoch 才能处理完链上所有需要进行提款的验证人 todo 查询链上数据获取 可以复用
         epochs_to_sweep = self._get_sweep_delay_in_epochs(blockstamp)
-        # epochs_to_sweep = 1
+        # epochs_to_sweep = 104
         logger.info({'msg': 'Calculate epochs to sweep.', 'value': epochs_to_sweep})
 
         # 奖励库金额
@@ -227,26 +228,35 @@ class Ejector(BaseModule, ConsensusModule):
         validator_to_eject_balance_sum = 0
         # 可以退出的验证人列表 调验证者合约拿到所有验证者列表 过滤状态为VALIDATING的列表 对应枚举索引值为2
         # function getNodeValidators(uint256 startIndex, uint256 amount) external view returns (address[] memory operators, bytes[] memory pubkeys, ValidatorStatus[] memory statuses);
-        node_validators = self.w3.lido_contracts.registry.functions.getNodeValidators(0, 0).call()
-        logger.info({'msg': 'node_validators.', 'value': node_validators})
-        # 使用列表解析来查找验证者状态为VALIDATING并生成包含目标元素索引的新列表
-        index_status_list = [index for index in range(len(node_validators[2])) if node_validators[2][index] == 2]
-        validators_list = []
-        # 可以退出的验证人列表(遍历状态为VALIDATING的验证者数组,得到状态为VALIDATING的验证者数组)
-        for index in index_status_list:
-            validators_list.append(node_validators[1][index])
+        # node_validators = self.w3.lido_contracts.registry.functions.getNodeValidators(0, 0).call()
+        #
+        # logger.info({'msg': 'node_validators.', 'value': node_validators})
+        # # 使用列表解析来查找验证者状态为VALIDATING并生成包含目标元素索引的新列表
+        # index_status_list = [index for index in range(len(node_validators[2])) if node_validators[2][index] == 2]
+        # validators_list = []
+        # # 可以退出的验证人列表(遍历状态为VALIDATING的验证者数组,得到状态为VALIDATING的验证者数组)
+        # for index in index_status_list:
+        #     validators_list.append(node_validators[1][index])
 
-        dawn_pool_validators_list = self.w3.lido_validators.get_dawn_pool_validators_by_keys(blockstamp, validators_list)
+        # logger.info({'msg': 'index_status_list.', 'len': len(index_status_list), 'value': index_status_list})
+        # hex_status_keys = tuple('0x' + binascii.hexlify(pk).decode('ascii') for pk in validators_list)
+        # logger.info({'msg': 'hex_status_keys.', 'len': len(hex_status_keys), 'value': hex_status_keys})
+
+        # 可以退出的验证人列表 调验证者合约拿到所有验证者列表 过滤状态为VALIDATING的列表 对应枚举索引值为2
+        dawn_pool_validators_list = self.w3.lido_validators.get_dawn_pool_validators_by_keys(blockstamp)
+        logger.info({'msg': 'dawn_pool_validators_list.', 'len': len(dawn_pool_validators_list), 'value': dawn_pool_validators_list})
 
         for validator in dawn_pool_validators_list:
             # 获取待提款的的可提现时期，以便确定在何时可以提取这些代币  提款请求队列中的已退出验证人数量加上正在退出验证人数量再加上1 todo 可以复用 跑数据验证下
             withdrawal_epoch = self._get_predicted_withdrawable_epoch(blockstamp, eject_count + len(validators_going_to_exit) + 1)
+            logger.info({'msg': 'withdrawal_epoch.', 'value': withdrawal_epoch})
             # 计算即将退出的验证人可以获得的未来奖励数量  从当前 Epoch 开始，到待提款的 EL 代币可以提现的 Epoch 结束，再加上扫描的 Epoch 数量，共有多少个 Epoch. blockstamp.ref_epoch 返回指定时间戳所在的引用时期编号
             # 然后将这个 Epoch 数量乘以每个 Epoch 的奖励速度，即可得到该验证人在未来可以获得的奖励数量
             future_rewards = (withdrawal_epoch + epochs_to_sweep - blockstamp.ref_epoch) * rewards_speed_per_epoch
+            logger.info({'msg': 'future_rewards.', 'value': future_rewards})
             # 验证者退出之前所有验证者的"全部提款"的总额  （指定时间戳和提款时期的可提取 验证者余额） todo
             future_withdrawals = self._get_withdrawable_lido_validators_balance(blockstamp, withdrawal_epoch)
-
+            logger.info({'msg': 'future_withdrawals.', 'value': future_withdrawals})
             # 计算当前的预期总余额
             expected_balance = (
                 future_withdrawals +  # Validators that have withdrawal_epoch 指定时间戳和提款时期的可提取 验证者余额
@@ -303,7 +313,7 @@ class Ejector(BaseModule, ConsensusModule):
         # node_validators = registry.functions.getNodeValidators(0, 0).call()[1]
 
         # event SigningKeyExiting(uint256 indexed validatorId, address indexed operator, bytes pubkey); 最近请求退出验证者的事件
-        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExiting.getLogs()
+        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExit.getLogs()
         dawn_pool_exiting_list = []
         for event in exiting_events:
             dawn_pool_exiting_list.append(DawnPoolValidator(event.pubkey, event.validatorId, event.operator))

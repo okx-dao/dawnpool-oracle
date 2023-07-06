@@ -134,7 +134,7 @@ class LidoValidatorsProvider(Module):
     def get_dawn_pool_validators(self, blockstamp: BlockStamp) -> list[DawnPoolValidator]:
         # 通过我们合约获取所有pub_keys todo
         dawn_pool_keys = self.w3.lido_contracts.registry.functions.getNodeValidators(0, 0).call()[1]
-        logger.info({'msg': 'Fetch dawn pool keys.', 'value': dawn_pool_keys})
+        logger.info({'msg': 'Fetch dawn pool keys.', 'value': dawn_pool_keys.decode('utf-8')})
         validators = self.w3.cc.get_pub_key_validators(blockstamp, dawn_pool_keys)
 
         return self.merge_dawn_pool_validators_with_keys(dawn_pool_keys, validators)

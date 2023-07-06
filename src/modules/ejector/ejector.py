@@ -225,12 +225,12 @@ class Ejector(BaseModule, ConsensusModule):
         eject_count = 0
         # 即将退出的验证人的总待提款余额
         validator_to_eject_balance_sum = 0
-        # 可以退出的验证人列表 todo 调验证者合约拿到所有验证者列表 过滤状态为VALIDATING的列表
+        # 可以退出的验证人列表 调验证者合约拿到所有验证者列表 过滤状态为VALIDATING的列表 对应枚举索引值为2
         # function getNodeValidators(uint256 startIndex, uint256 amount) external view returns (address[] memory operators, bytes[] memory pubkeys, ValidatorStatus[] memory statuses);
         node_validators = self.w3.lido_contracts.registry.functions.getNodeValidators(0, 0).call()
         logger.info({'msg': 'node_validators.', 'value': node_validators})
         # 使用列表解析来查找验证者状态为VALIDATING并生成包含目标元素索引的新列表
-        index_status_list = [index for index in range(len(node_validators[2])) if node_validators[2][index] == "VALIDATING"]
+        index_status_list = [index for index in range(len(node_validators[2])) if node_validators[2][index] == 2]
         validators_list = []
         # 可以退出的验证人列表(遍历状态为VALIDATING的验证者数组,得到状态为VALIDATING的验证者数组)
         for index in index_status_list:
@@ -446,7 +446,7 @@ class Ejector(BaseModule, ConsensusModule):
 
         chain_config = self.get_chain_config(blockstamp)
         # MAX_WITHDRAWALS_PER_PAYLOAD 表示每次向链上提交的提款交易数量的上限
-        full_sweep_in_epochs = total_withdrawable_validators / MAX_WITHDRAWALS_PER_PAYLOAD / chain_config.slots_per_epoch
+        full_sweep_in_epochs = total_withdrawable_validators / MAX_WITHDRAWALS_PER_PAYLOAD / chain_config.slotsPerEpoch
         # 计算出的需要清理的 epoch 数量
         return int(full_sweep_in_epochs * self.AVG_EXPECTING_WITHDRAWALS_SWEEP_DURATION_MULTIPLIER)
 

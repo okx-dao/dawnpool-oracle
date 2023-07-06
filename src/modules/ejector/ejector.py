@@ -313,7 +313,10 @@ class Ejector(BaseModule, ConsensusModule):
         # node_validators = registry.functions.getNodeValidators(0, 0).call()[1]
 
         # event SigningKeyExiting(uint256 indexed validatorId, address indexed operator, bytes pubkey); 最近请求退出验证者的事件
-        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExit.getLogs()
+        exiting_events = self.w3.lido_contracts.registry.events.SigningKeyExit.get_logs()
+        if not exiting_events:
+            return Wei(0)
+
         dawn_pool_exiting_list = []
         for event in exiting_events:
             dawn_pool_exiting_list.append(DawnPoolValidator(event.pubkey, event.validatorId, event.operator))

@@ -265,6 +265,7 @@ class Ejector(BaseModule, ConsensusModule):
                 validator_to_eject_balance_sum +  # Validators that we expected to be ejected (requested to exit, not delayed) 已请求退出但仍在延迟期内的验证人节点持有的ETH总余额之和
                 going_to_withdraw_balance  # validators_to_eject balance 已被排队等待退出的验证人节点持有的 ETH
             )
+            logger.info({'msg': 'expected_balance.', 'value': expected_balance})
             # 判断是否已经可以退出指定数量的验证人节点，并在可以退出的情况下返回要退出的验证人节点列表  预期总余额大于或等于需要退出的代币数量
             if expected_balance >= to_withdraw_amount:
                 logger.info({
@@ -291,6 +292,7 @@ class Ejector(BaseModule, ConsensusModule):
             # 更新已请求退出但仍在延迟期内的验证人节点持有的 EL 代币数量之和 todo 查询有效余额 取有效余额和32的最小值
             # validator_to_eject_balance_sum += MAX_EFFECTIVE_BALANCE
             validator_to_eject_balance_sum += self._get_predicted_withdrawable_balance(validator)
+            logger.info({'msg': 'validator_to_eject_balance_sum.', 'value': validator_to_eject_balance_sum})
             eject_count += 1
 
         return eject_count

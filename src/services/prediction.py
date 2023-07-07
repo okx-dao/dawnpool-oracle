@@ -98,8 +98,14 @@ class RewardsPredictionService:
         for event in eth_rewards_events:
             total_rewards += event['args']['postCLBalance'] + event['args']['rewardsVaultBalance'] - event['args']['preCLBalance']
 
+        logger.info({'msg': 'Fetch eth rewards events.', 'time_spent': time_spent, 'total_rewards': total_rewards})
+        # return max(
+        #     Wei(total_rewards * chain_configs.secondsPerSlot * chain_configs.slotsPerEpoch // time_spent),
+        #     Wei(0),
+        # )
+        # ToDo 计算每个epoch平均奖励数
         return max(
-            Wei(total_rewards * chain_configs.secondsPerSlot * chain_configs.slotsPerEpoch // time_spent),
+            Wei(total_rewards // time_spent),
             Wei(0),
         )
 

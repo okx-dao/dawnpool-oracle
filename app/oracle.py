@@ -225,7 +225,7 @@ logging.info(f'Epochs per frame: {epochs_per_frame} (auto-discovered)')
 logging.info(f'Genesis time: {genesis_time} (auto-discovered)')
 
 
-def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedValidatorsCount, burnedPethAmount,
+def build_report_beacon_tx(epoch, balance, validators, activeValidatorBalance, exitedValidatorsCount, burnedPethAmount,
                            lastRequestIdToBeFulfilled, ethAmountToLock):  # hash tx
     max_fee_per_gas, max_priority_fee_per_gas = _get_tx_gas_params()
 
@@ -233,7 +233,7 @@ def build_report_beacon_tx(epoch, balance, validators, rewardsBalance, exitedVal
         'epochId': epoch,
         'beaconBalance': balance,
         'beaconValidators': validators,
-        'rewardsVaultBalance': rewardsBalance,
+        'rewardsVaultBalance': activeValidatorBalance,
         'exitedValidators': exitedValidatorsCount,
         'burnedPEthAmount': burnedPethAmount,
         'lastRequestIdToBeFulfilled': lastRequestIdToBeFulfilled,
@@ -388,7 +388,7 @@ def update_beacon_data():
     warnings = compare_pool_metrics(prev_metrics, current_metrics)
 
     logging.info(
-        f'Tx call data: oracle.reportBeacon({current_metrics.epoch}, {current_metrics.beaconBalance}, {current_metrics.beaconValidators}, {current_metrics.rewardsVaultBalance}'
+        f'Tx call data: oracle.reportBeacon({current_metrics.epoch}, {current_metrics.activeValidatorBalance}, {current_metrics.beaconValidators}, {current_metrics.rewardsVaultBalance}'
         f', {current_metrics.exitedValidatorsCount} , {current_metrics.burnedPethAmount}, {current_metrics.lastRequestIdToBeFulfilled}, {current_metrics.ethAmountToLock})'
     )
     # 上报数据
@@ -397,7 +397,7 @@ def update_beacon_data():
         try:
             metrics_exporter_state.reportableFrame.set(True)
             tx = build_report_beacon_tx(
-                current_metrics.epoch, current_metrics.beaconBalance, current_metrics.beaconValidators,
+                current_metrics.epoch, current_metrics.activeValidatorBalance, current_metrics.beaconValidators,
                 current_metrics.rewardsVaultBalance,
                 current_metrics.exitedValidatorsCount, current_metrics.burnedPethAmount,
                 current_metrics.lastRequestIdToBeFulfilled, current_metrics.ethAmountToLock)

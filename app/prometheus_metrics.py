@@ -88,7 +88,7 @@ class MetricsExporterState:
         self.currentEthV1BlockNumber.set(metrics.blockNumber)
         self.currentEpoch.set(metrics.epoch)
         self.currentBeaconBalance.set(metrics.beaconBalance)
-        self.currentWithdrawalVaultBalance.set(metrics.withdrawalVaultBalance)
+        self.currentWithdrawalVaultBalance.set(metrics.rewardsVaultBalance)
         self.currentBeaconValidators.set(metrics.beaconValidators)
         self.currentTimestamp.set(metrics.timestamp)
         self.currentBufferedBalance.set(metrics.bufferedBalance)

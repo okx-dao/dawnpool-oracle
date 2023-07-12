@@ -240,7 +240,7 @@ def build_report_beacon_tx(epoch, balance, validators, activeValidatorBalance, e
         'ethAmountToLock': ethAmountToLock
     }
 
-    # todo 金额位数修改
+    #  金额位数修改
     return oracle.functions.reportBeacon(data).buildTransaction(
         {
             'from': account.address,

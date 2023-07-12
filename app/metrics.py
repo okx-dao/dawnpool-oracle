@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2020 Lido <info@lido.fi>
-
+import binascii
 # SPDX-License-Identifier: GPL-3.0
 
 import logging
@@ -18,7 +18,7 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     logging.info('Getting previously reported numbers (will be fetched from events)...')
     genesis_time = beacon_spec[3]
     result = PoolMetrics()
-    # 通过abi调用pool合约 todo preDepositValidators 参数验证
+    # 通过abi调用pool合约
     result.preDepositValidators, result.depositedValidators, result.beaconValidators, result.beaconBalance = pool.functions.getBeaconStat().call()
     # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
     result.bufferedBalance = pool.functions.getBufferedEther().call()
@@ -34,7 +34,7 @@ def get_previous_metrics(w3, pool, oracle, beacon_spec, rewards_vault_address, f
     step = 1000
     for end in range(latest_block['number'], from_block, -step):
         start = max(end - step + 1, from_block)
-        # 调用了 getLogs 方法来读取区块链上合约中 Completed 事件在指定区块高度范围内的日志,日志会被存储在 events 变量中 todo
+        # 调用了 getLogs 方法来读取区块链上合约中 Completed 事件在指定区块高度范围内的日志,日志会被存储在 events 变量中
         events = oracle.events.Completed.getLogs(fromBlock=start, toBlock=end)
         # 判断 events 是否为空 如果存在符合条件的事件日志，获取最后一个事件，即 events[-1]，并从中提取出相应的信息
         if events:
@@ -96,7 +96,10 @@ def get_full_current_metrics(
     logging.info(f'Reportable state, epoch:{partial_metrics.epoch} slot:{slot}')
     #  获取注册的验证者的key 通过abi获取
     validators_keys = registry.functions.getNodeValidators(0, 0).call()[1]
-    logging.info(f'Total validator keys detail: {validators_keys}')
+
+    hex_validators_keys = tuple('0x' + binascii.hexlify(pk).decode('ascii') for pk in validators_keys)
+
+    logging.info({'msg': 'Fetch dawn pool status keys.', 'value': hex_validators_keys})
     logging.info(f'Total validator keys in registry: {len(validators_keys)}')
     full_metrics = partial_metrics
     # 根据验证者的key在信标链中计算信标余额，信标验证器，活跃的验证者余额
@@ -109,8 +112,8 @@ def get_full_current_metrics(
     ) = beacon.get_balances(slot, validators_keys)
 
     logging.info(
-        f'DawnPool validators\' sum. balance on Beacon: '
-        f'{full_metrics.beaconBalance} wei or {full_metrics.beaconBalance / 1e18} ETH'
+        f'DawnPool validators\' beaconBalance: {full_metrics.beaconBalance},beaconValidators:{full_metrics.beaconValidators}'
+        f',activeValidatorBalance:{full_metrics.activeValidatorBalance},exitedValidatorsCount:{full_metrics.exitedValidatorsCount}'
     )
 
     block_number = beacon.get_block_by_beacon_slot(slot)
@@ -123,7 +126,7 @@ def get_full_current_metrics(
     )
     logging.info(f'DawnPool the balance of the reward pool address : {full_metrics.rewardsVaultBalance}')
 
-    # 获取lastRequestIdToBeFulfilled和ethAmountToLock todo
+    # 获取lastRequestIdToBeFulfilled和ethAmountToLock
     buffered_ether = pool.functions.getBufferedEther().call()
     # 返回数组切片 returns (WithdrawRequest[] memory unfulfilledWithdrawRequestQueue)
     unfulfilled_withdraw_request_queue = withdraw.functions.getUnfulfilledWithdrawRequestQueue().call()
@@ -135,14 +138,14 @@ def get_full_current_metrics(
     latest_index = 0
 
     logging.info(f'Dawn validators full_metrics: {full_metrics.beaconValidators}, {full_metrics.activeValidatorBalance},'
-                 f'{full_metrics.withdrawalVaultBalance},{full_metrics.exitedValidatorsCount}')
+                 f'{full_metrics.rewardsVaultBalance},{full_metrics.exitedValidatorsCount}')
 
     # 计算汇率：预估当前数据提交后，汇率是多少
     # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
     # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
     total_ether, total_peth = pool.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
                                                                       full_metrics.activeValidatorBalance,
-                                                                      full_metrics.withdrawalVaultBalance,
+                                                                      full_metrics.rewardsVaultBalance,
                                                                       full_metrics.exitedValidatorsCount).call()
     logging.info(f'Dawn pre_calculate_exchange_rate : {total_ether},{total_peth}')
     # 遍历数组  从1开始遍历
@@ -164,7 +167,7 @@ def get_full_current_metrics(
         actual_amount = min(eth_amount1, eth_amount2)
         logging.info(f'Dawn actual_amount : {actual_amount}')
 
-        if request_sum + actual_amount > buffered_ether + full_metrics.withdrawalVaultBalance:
+        if request_sum + actual_amount > buffered_ether + full_metrics.rewardsVaultBalance:
             target_index = i - 1
             target_value = request_sum
             logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue  target_index: {i}, target_value: {target_value}')
@@ -185,7 +188,7 @@ def get_full_current_metrics(
     full_metrics.ethAmountToLock = target_value
     logging.info(f'Dawn latest_index : {latest_index},target_value: {target_value}, ')
 
-    # 获取燃币金额 todo
+    # 获取燃币金额
     burner_contract_to_burned = burner.functions.getPEthBurnRequest().call()
     withdraw_to_burned = unfulfilled_withdraw_request_queue[target_index][1] - unfulfilled_withdraw_request_queue[0][1]
     full_metrics.burnedPethAmount = burner_contract_to_burned + withdraw_to_burned

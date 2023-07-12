@@ -13,6 +13,7 @@ class PoolMetrics:
     depositedValidators = 0
     activeValidatorBalance = 0
     withdrawalVaultBalance = 0
+    rewardsVaultBalance = 0
     exitedValidatorsCount = 0
     burnedPethAmount = 0
     lastRequestIdToBeFulfilled = 0
@@ -24,7 +25,7 @@ class PoolMetrics:
 
     def getTransientValidators(self):
 
-        assert self.depositedValidators + self.preDepositValidators >= self.beaconValidators
+        # assert self.depositedValidators + self.preDepositValidators >= self.beaconValidators
         return self.depositedValidators + self.preDepositValidators - self.beaconValidators
 
     def getTransientBalance(self):

@@ -78,7 +78,7 @@ class BeaconChainClient:
         response = session.get(urljoin(self.url, self.api_beacon_block.format(slot)), timeout=DEFAULT_TIMEOUT)
 
         init_slot = slot
-        # todo 下一帧结束之前结束
+        # 下一帧结束之前结束
         while response.status_code == 404:
             logging.info(f'slot missed: {slot}, next slot {slot + 1}')
             # 225 epoch = 7200 slot
@@ -122,6 +122,7 @@ class BeaconChainClient:
         logging.info(f'Validator balances on beacon for slot: {slot}')
 
         validator_pub_keys = self._from_bytes_to_pub_keys(keys_list)
+        logging.info(f'Total validator pub keys: {validator_pub_keys}')
 
         validators_count = 0
         total_balance = 0
@@ -132,7 +133,7 @@ class BeaconChainClient:
             if validator['validator']['pubkey'] in validator_pub_keys:
                 total_balance += int(validator['balance'])
                 if validator['status'] in [ValidatorStatus.ACTIVE, ValidatorStatus.ACTIVE_ONGOING]:
-                    # 需要上传激活的验证者数量 todo
+                    # 需要上传激活的验证者数量
                     validators_count += 1
                     active_validators_balance += int(validator['balance'])
                 if validator['status'] in [ValidatorStatus.WITHDRAWAL_DONE]:

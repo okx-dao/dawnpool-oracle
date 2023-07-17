@@ -7,6 +7,7 @@ import logging
 import datetime
 
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 from contracts import get_validators_keys
 from pool_metrics import PoolMetrics
@@ -138,16 +139,21 @@ def get_full_current_metrics(
     target_value = 0
     latest_index = 0
 
-    logging.info(f'Dawn validators full_metrics: {full_metrics.beaconValidators}, {full_metrics.activeValidatorBalance},'
-                 f'{full_metrics.rewardsVaultBalance},{full_metrics.exitedValidatorsCount}')
+    logging.info(
+        f'Dawn validators full_metrics: {full_metrics.beaconValidators}, {full_metrics.activeValidatorBalance},'
+        f'{full_metrics.rewardsVaultBalance},{full_metrics.exitedValidatorsCount}')
 
-    # 计算汇率：预估当前数据提交后，汇率是多少
+    # 计算汇率：预估当前数据提交后，汇率是多少  没有奖励有异常进程停止，捕获异常
     # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
     # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
-    total_ether, total_peth = pool.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
-                                                                      full_metrics.activeValidatorBalance,
-                                                                      full_metrics.rewardsVaultBalance,
-                                                                      full_metrics.exitedValidatorsCount).call()
+    try:
+        total_ether, total_peth = pool.functions.preCalculateExchangeRate(full_metrics.beaconValidators,
+                                                                          full_metrics.activeValidatorBalance,
+                                                                          full_metrics.rewardsVaultBalance,
+                                                                          full_metrics.exitedValidatorsCount).call()
+    except ContractLogicError as e:
+        logging.warning(f'Dawn get pre_calculate_exchange_rate total_ether,total_peth throw Exception: {e} ')
+
     logging.info(f'Dawn pre_calculate_exchange_rate total_ether: {total_ether},total_peth: {total_peth}')
     # 遍历数组  从1开始遍历
     for i in range(1, len(unfulfilled_withdraw_request_queue)):
@@ -161,7 +167,7 @@ def get_full_current_metrics(
         logging.info(f'Dawn eth_amount1 : {eth_amount1}')
         # 赎回的peth量
         peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
-        logging.info(f'Dawn peth : {peth}, original eth_amount2: {peth*total_ether/total_peth}')
+        logging.info(f'Dawn peth : {peth}, original eth_amount2: {peth * total_ether / total_peth}')
         # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
         # eth_amount2 = 0
         if total_peth == 0:
@@ -191,7 +197,8 @@ def get_full_current_metrics(
 
     # returns (uint256 lastFulfillmentRequestId, uint256 lastRequestId, uint256 lastCheckpointIndex);
     withdraw_queue_stat = withdraw.functions.getWithdrawQueueStat().call()
-    logging.info(f'Dawn withdraw_queue_stat : {withdraw_queue_stat[0]},{withdraw_queue_stat[1]},{withdraw_queue_stat[2]}')
+    logging.info(
+        f'Dawn withdraw_queue_stat : {withdraw_queue_stat[0]},{withdraw_queue_stat[1]},{withdraw_queue_stat[2]}')
 
     latest_index = withdraw_queue_stat[0] + target_index
 
@@ -203,7 +210,8 @@ def get_full_current_metrics(
     burner_contract_to_burned = burner.functions.getPEthBurnRequest().call()
     withdraw_to_burned = unfulfilled_withdraw_request_queue[target_index][1] - unfulfilled_withdraw_request_queue[0][1]
     full_metrics.burnedPethAmount = burner_contract_to_burned + withdraw_to_burned
-    logging.info(f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount},burner_contract_to_burned:{burner_contract_to_burned},withdraw_to_burned:{withdraw_to_burned}')
+    logging.info(
+        f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount},burner_contract_to_burned:{burner_contract_to_burned},withdraw_to_burned:{withdraw_to_burned}')
 
     logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
     return full_metrics

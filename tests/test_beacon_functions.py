@@ -99,7 +99,7 @@ def test_balance(lighthouse_requests):
 
 def test_block(lighthouse_requests):
     beacon = BeaconChainClient('localhost', 1)
-    result = beacon.get_block_by_beacon_slot('finalized')
+    result = beacon.get_block_by_beacon_slot('finalized', 10, 32)
     assert result == 8590563
 
 
@@ -110,5 +110,5 @@ def test_missing_slot(lighthouse_requests):
     slot = beacon.get_slot_for_report(43, 225, 32)
     assert slot == 42
 
-    result = beacon.get_block_by_beacon_slot(slot)
+    result = beacon.get_block_by_beacon_slot(slot, 10, 32)
     assert result == 8590563

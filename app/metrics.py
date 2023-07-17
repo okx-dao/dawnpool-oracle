@@ -118,7 +118,7 @@ def get_full_current_metrics(
         f',activeValidatorBalance:{full_metrics.activeValidatorBalance},exitedValidatorsCount:{full_metrics.exitedValidatorsCount}'
     )
 
-    block_number = beacon.get_block_by_beacon_slot(slot)
+    block_number = beacon.get_block_by_beacon_slot(slot, beacon_spec[0], beacon_spec[1])
 
     logging.info(f'Validator block_number: {block_number}')
     #  查询奖励库的地址当前时间对应账户在指定区块高度时的余额

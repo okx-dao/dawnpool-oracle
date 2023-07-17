@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2020 Lido <info@lido.fi>
 import binascii
+import decimal
 # SPDX-License-Identifier: GPL-3.0
 
 import logging
@@ -147,7 +148,7 @@ def get_full_current_metrics(
                                                                       full_metrics.activeValidatorBalance,
                                                                       full_metrics.rewardsVaultBalance,
                                                                       full_metrics.exitedValidatorsCount).call()
-    logging.info(f'Dawn pre_calculate_exchange_rate : {total_ether},{total_peth}')
+    logging.info(f'Dawn pre_calculate_exchange_rate total_ether: {total_ether},total_peth: {total_peth}')
     # 遍历数组  从1开始遍历
     for i in range(1, len(unfulfilled_withdraw_request_queue)):
         if len(unfulfilled_withdraw_request_queue) < 2:
@@ -160,11 +161,21 @@ def get_full_current_metrics(
         logging.info(f'Dawn eth_amount1 : {eth_amount1}')
         # 赎回的peth量
         peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
-        logging.info(f'Dawn peth : {peth}')
+        logging.info(f'Dawn peth : {peth}, original eth_amount2: {peth*total_ether/total_peth}')
         # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
-        eth_amount2 = peth * total_ether / total_peth
-        logging.info(f'Dawn eth_amount2 : {eth_amount2}')
-        actual_amount = min(eth_amount1, eth_amount2)
+        # eth_amount2 = 0
+        if total_peth == 0:
+            eth_amount2 = 0
+        else:
+            eth_amount2 = decimal.Decimal(peth) * decimal.Decimal(total_ether) / decimal.Decimal(total_peth)
+
+        if eth_amount2 == 0:
+            eth_amount2_int = 0
+        else:
+            eth_amount2_int = int(eth_amount2.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_DOWN))
+        # eth_amount2 = peth * total_ether / total_peth
+        logging.info(f'Dawn eth_amount2 : {eth_amount2}, eth_amount2_int: {eth_amount2_int}')
+        actual_amount = min(eth_amount1, eth_amount2_int)
         logging.info(f'Dawn actual_amount : {actual_amount}')
 
         if request_sum + actual_amount > buffered_ether + full_metrics.rewardsVaultBalance:

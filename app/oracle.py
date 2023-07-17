@@ -403,7 +403,12 @@ def update_beacon_data():
                 current_metrics.lastRequestIdToBeFulfilled, current_metrics.ethAmountToLock)
             # Create the tx and execute it locally to check validity
             # logging.info(f'Calling tx: ', {tx})
-            w3.eth.call(tx)
+            locally_result = w3.eth.call(tx)
+            logging.info(f'Calling tx locally result : {locally_result}')
+            # 检查返回结果
+            if len(locally_result) > 0:
+                error_message = w3.toText(locally_result)
+                logging.info(f'Calling tx locally result error message: {error_message}')
 
             logging.info('Calling tx locally succeeded.')
             if run_as_daemon:

@@ -81,7 +81,7 @@ class BeaconChainClient:
         # 下一帧结束之前结束
         while response.status_code == 404:
             logging.info(f'slot missed: {slot}, next slot {slot + 1}')
-            # 225 epoch = 7200 slot
+            # 225 epoch = 7200 slot todo
             if slot < init_slot + 7200:
                 slot += 1
                 response = session.get(urljoin(self.url, self.api_beacon_block.format(slot)), timeout=DEFAULT_TIMEOUT)
@@ -131,12 +131,14 @@ class BeaconChainClient:
 
         for validator in all_validators:
             if validator['validator']['pubkey'] in validator_pub_keys:
+                logging.info(f' validator info: {validator}')
                 total_balance += int(validator['balance'])
-                if validator['status'] in [ValidatorStatus.ACTIVE, ValidatorStatus.ACTIVE_ONGOING]:
+                if validator['status'] in [ValidatorStatus.ACTIVE, ValidatorStatus.ACTIVE_ONGOING, ValidatorStatus.WITHDRAWAL_POSSIBLE,
+                                           ValidatorStatus.ACTIVE_EXITING, ValidatorStatus.ACTIVE_SLASHED, ValidatorStatus.EXITED_UNSLASHED, ValidatorStatus.EXITED_SLASHED]:
                     # 需要上传激活的验证者数量
                     validators_count += 1
                     active_validators_balance += int(validator['balance'])
-                if validator['status'] in [ValidatorStatus.WITHDRAWAL_DONE]:
+                elif validator['status'] in [ValidatorStatus.WITHDRAWAL_DONE]:
                     exited_validators_count += 1
 
         # Convert Gwei to wei

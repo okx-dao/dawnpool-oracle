@@ -45,39 +45,11 @@ from src.web3py.typings import Web3
 
 logger = logging.getLogger(__name__)
 
-# ARTIFACTS_DIR = './assets'
-# ORACLE_ARTIFACT_FILE = 'DawnPoolOracle.json'
-# POOL_ARTIFACT_FILE = 'DawnDeposit.json'
-# REGISTRY_ARTIFACT_FILE = 'DepositNodeManager.json'
-# WITHDRAW_ARTIFACT_FILE = 'DawnWithdraw.json'
-#
-# pool_address = os.environ['POOL_CONTRACT']
-# if not Web3.is_checksum_address(pool_address):
-#     pool_address = Web3.to_checksum_address(pool_address)
-#
-# oracle_address = os.environ['ORACLE_CONTRACT']
-# if not Web3.is_checksum_address(oracle_address):
-#     oracle_address = Web3.to_checksum_address(oracle_address)
-#
-# node_manager_address = os.environ['NODE_MANAGER_CONTRACT']
-# if not Web3.is_checksum_address(node_manager_address):
-#     node_manager_address = Web3.to_checksum_address(node_manager_address)
-#
-# withdraw_address = os.environ['WITHDRAW_CONTRACT']
-# if not Web3.is_checksum_address(withdraw_address):
-#     withdraw_address = Web3.to_checksum_address(withdraw_address)
-#
 # 奖励库的地址
 rewards_vault_address = os.environ['REWARDS_VAULT_ADDRESS']
 if not Web3.is_checksum_address(rewards_vault_address):
     rewards_vault_address = Web3.to_checksum_address(rewards_vault_address)
 
-
-# 获取合约abi路径
-# oracle_abi_path = os.path.join(ARTIFACTS_DIR, ORACLE_ARTIFACT_FILE)
-# pool_abi_path = os.path.join(ARTIFACTS_DIR, POOL_ARTIFACT_FILE)
-# registry_abi_path = os.path.join(ARTIFACTS_DIR, REGISTRY_ARTIFACT_FILE)
-# withdraw_abi_path = os.path.join(ARTIFACTS_DIR, WITHDRAW_ARTIFACT_FILE)
 
 eth1_provider = os.environ['EXECUTION_CLIENT_URI']
 
@@ -87,28 +59,6 @@ w3 = Web3(provider)
 if not w3.is_connected():
     logging.error('ETH node connection error!')
     exit(1)
-
-# Get Pool contract
-# with open(pool_abi_path, 'r') as file:
-#     a = file.read()
-# abi = json.loads(a)
-# pool = w3.eth.contract(abi=abi['abi'], address=pool_address)  # contract object
-#
-# with open(oracle_abi_path, 'r') as file:
-#     a = file.read()
-# abi = json.loads(a)
-# oracle = w3.eth.contract(abi=abi['abi'], address=oracle_address)
-#
-# with open(registry_abi_path, 'r') as file:
-#     a = file.read()
-# abi = json.loads(a)
-# registry = w3.eth.contract(abi=abi['abi'], address=node_manager_address)
-#
-# with open(withdraw_abi_path, 'r') as file:
-#     a = file.read()
-# abi = json.loads(a)
-# withdraw = w3.eth.contract(abi=abi['abi'], address=withdraw_address)
-
 
 class Ejector(BaseModule, ConsensusModule):
     """
@@ -143,7 +93,7 @@ class Ejector(BaseModule, ConsensusModule):
         self.report_contract = self.w3.lido_contracts.validators_exit_bus_oracle
 
     def execute_module(self, last_finalized_blockstamp: BlockStamp) -> ModuleExecuteDelay:
-        # todo 怎么获取
+        # 怎么获取
         report_blockstamp = self.get_blockstamp_for_report(last_finalized_blockstamp)
         if not report_blockstamp:
             return ModuleExecuteDelay.NEXT_FINALIZED_EPOCH
@@ -165,17 +115,17 @@ class Ejector(BaseModule, ConsensusModule):
         )
 
         # data, data_format = encode_data(validators)
-
         report_data = ReportEjectData(
             blockstamp.ref_epoch,
             eject_count,
         )
-
+        logger.info({
+            'msg': f'Calculate validators to report data: {report_data}'},
+        )
         EJECTOR_VALIDATORS_COUNT_TO_EJECT.set(report_data.requests_count)
 
         return report_data.as_tuple()
 
-    # todo 有些数据获取逻辑比较复杂 可以先从合约方法中获取
     # 计算需要弹出的验证器 接受一个区块时间戳对象 blockstamp 作为输入参数，并返回一个列表，包含需要弹出的验证器的全局索引和 Validator 类型的对象组成的元组。
     def get_validators_to_eject(self, blockstamp: ReferenceBlockStamp) -> int:
         # 所有未完成提现请求的总金额(需要退出的数量)，它将被用于计算可退出验证人的余额。 ToDo 调withdraw合约拿

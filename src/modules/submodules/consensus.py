@@ -209,7 +209,6 @@ class ConsensusModule(ABC):
         """
         # latest_blockstamp = self._get_latest_blockstamp()
 
-        # todo
         # if not self._check_contract_versions(latest_blockstamp):
         #     logger.info({
         #         'msg': 'Oracle\'s version is higher than contract and/or consensus version. '
@@ -222,7 +221,7 @@ class ConsensusModule(ABC):
         #     logger.info({'msg': 'Contract is not reportable.'})
         #     return None
 
-        # todo  member成员判断
+        #  member成员判断
         # member_info = self.get_member_info(latest_blockstamp)
         # logger.info({'msg': 'Fetch member info.', 'value': member_info})
         #
@@ -240,7 +239,6 @@ class ConsensusModule(ABC):
         # frame_config = self.get_frame_config(last_finalized_blockstamp)
         #
         # converter = Web3Converter(chain_config, frame_config)
-        #
         #
 
         block_stamp = self._get_latest_blockstamp()
@@ -290,8 +288,18 @@ class ConsensusModule(ABC):
         report_data = self.build_report(blockstamp)
         logger.info({'msg': 'Build report.', 'value': report_data})
 
-        report_hash = self._encode_data_hash(report_data)
-        logger.info({'msg': 'Calculate report hash.', 'value': report_hash})
+        eject_count = report_data[1]
+        logger.info({'msg': 'Build report.', 'eject_count': eject_count})
+        # eject_count = 0时不上报，节省gas
+        if eject_count == 0:
+            logger.warning({
+                'msg': f'Process report eject_count is 0, save gas fee and do not report '
+            })
+        else:
+            report_hash = self._encode_data_hash(report_data)
+            logger.info({'msg': 'Calculate report hash.', 'value': report_hash})
+            self._process_report_data(blockstamp, report_data, report_hash)
+
         # We need to check whether report has unexpected data before sending.
         # otherwise we have to check it manually.
         # if not self.is_reporting_allowed(blockstamp):
@@ -300,7 +308,7 @@ class ConsensusModule(ABC):
 
         # self._process_report_hash(blockstamp, report_hash)
         # Even if report hash transaction was failed we have to check if we can report data for current frame
-        self._process_report_data(blockstamp, report_data, report_hash)
+        # self._process_report_data(blockstamp, report_data, report_hash)
 
     def _process_report_hash(self, blockstamp: ReferenceBlockStamp, report_hash: HexBytes) -> None:
         latest_blockstamp, member_info = self._get_latest_data()

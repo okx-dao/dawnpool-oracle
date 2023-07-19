@@ -36,11 +36,14 @@ validators_exit_bus_address = os.environ['VALIDATORS_EXIT_BUS_ORACLE_CONTRACT']
 if not Web3.is_checksum_address(validators_exit_bus_address):
     validators_exit_bus_address = Web3.to_checksum_address(validators_exit_bus_address)
 
-
 # 奖励库的地址
 rewards_vault_address = os.environ['REWARDS_VAULT_ADDRESS']
 if not Web3.is_checksum_address(rewards_vault_address):
     rewards_vault_address = Web3.to_checksum_address(rewards_vault_address)
+
+burner_address = os.environ['BURNER_CONTRACT']
+if not Web3.is_checksum_address(burner_address):
+    burner_address = Web3.to_checksum_address(burner_address)
 
 class LidoContracts(Module):
     lido_locator: Contract
@@ -151,7 +154,7 @@ class LidoContracts(Module):
         )
 
         self.burner = self.w3.eth.contract(
-            address=self.lido_locator.functions.burner().call(),
+            address=burner_address,
             abi=self.load_abi('Burner'),
             decode_tuples=True,
         )

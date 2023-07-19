@@ -1,13 +1,17 @@
 import logging
+import os
 from collections import defaultdict
 from time import sleep
 
 from web3.types import Wei
+from web3_multi_provider import MultiProvider
 
 from src import variables
 from src.constants import SHARE_RATE_PRECISION_E27
 from src.modules.accounting.typings import (
     ReportData,
+    OracleReportData,
+    PoolMetrics,
     AccountingProcessingState,
     LidoReportRebase,
     SharesRequestedToBurn,
@@ -34,6 +38,22 @@ from src.web3py.extensions.lido_validators import StakingModule, NodeOperatorGlo
 
 logger = logging.getLogger(__name__)
 
+# 奖励库的地址
+rewards_vault_address = os.environ['REWARDS_VAULT_ADDRESS']
+if not Web3.is_checksum_address(rewards_vault_address):
+    rewards_vault_address = Web3.to_checksum_address(rewards_vault_address)
+
+# 数据块的块号
+ORACLE_FROM_BLOCK = int(os.getenv('ORACLE_FROM_BLOCK', 0))
+
+eth1_provider = os.environ['EXECUTION_CLIENT_URI']
+
+provider = MultiProvider(eth1_provider.split(','))
+w3 = Web3(provider)
+
+if not w3.is_connected():
+    logging.error('ETH node connection error!')
+    exit(1)
 
 class Accounting(BaseModule, ConsensusModule):
     """
@@ -50,14 +70,14 @@ class Accounting(BaseModule, ConsensusModule):
     CONTRACT_VERSION = 1
 
     def __init__(self, w3: Web3):
-        self.report_contract = w3.lido_contracts.accounting_oracle
+        self.report_contract = w3.lido_contracts.oracle
         super().__init__(w3)
 
         self.lido_validator_state_service = LidoValidatorStateService(self.w3)
         self.bunker_service = BunkerService(self.w3)
 
     def refresh_contracts(self):
-        self.report_contract = self.w3.lido_contracts.accounting_oracle
+        self.report_contract = self.w3.lido_contracts.oracle
 
     def execute_module(self, last_finalized_blockstamp: BlockStamp) -> ModuleExecuteDelay:
         report_blockstamp = self.get_blockstamp_for_report(last_finalized_blockstamp)
@@ -143,6 +163,14 @@ class Accounting(BaseModule, ConsensusModule):
 
     # ---------------------------------------- Build report ----------------------------------------
     def _calculate_report(self, blockstamp: ReferenceBlockStamp) -> ReportData:
+        beacon_spec = self.w3.lido_contracts.oracle.functions.getBeaconSpec().call()
+        logger.info({'msg': 'Fetch beacon spec.', 'value': beacon_spec})
+        # 获取之前上报的数据
+        prev_metrics = self.get_previous_metrics(beacon_spec,  ORACLE_FROM_BLOCK)
+        logger.info({'msg': 'Fetch prev metrics.', 'value': prev_metrics})
+        logging.info(f'Previously reported epoch: {prev_metrics.epoch}')
+        logging.info(f'Previously reported bufferedBalance: {prev_metrics.bufferedBalance}')
+
         validators_count, cl_balance = self._get_consensus_lido_state(blockstamp)
 
         staking_module_ids_list, exit_validators_count_list = self._get_newly_exited_validators_by_modules(blockstamp)
@@ -174,6 +202,57 @@ class Accounting(BaseModule, ConsensusModule):
         ACCOUNTING_WITHDRAWAL_VAULT_BALANCE_WEI.set(report_data.withdrawal_vault_balance)
 
         return report_data
+
+    def get_previous_metrics(self, beacon_spec,  from_block=0) -> PoolMetrics:
+        logging.info('Getting previously reported numbers (will be fetched from events)...')
+        genesis_time = beacon_spec[3]
+        result = PoolMetrics()
+        # 通过abi调用pool合约
+        result.preDepositValidators, result.depositedValidators, result.beaconValidators, result.beaconBalance = self.w3.lido_contracts.pool.functions.getBeaconStat().call()
+        # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
+        result.bufferedBalance = self.w3.lido_contracts.pool.functions.getBufferedEther().call()
+        # Calculate the earliest block to limit scanning depth 计算最早的块以限制扫描深度
+        # 每个 ETH1 块的秒数 正常12s 出一个块 设置14s为了遍历
+        SECONDS_PER_ETH1_BLOCK = 14
+        latest_block = w3.eth.get_block('latest')
+        from_block = max(from_block, int((latest_block['timestamp'] - genesis_time) / SECONDS_PER_ETH1_BLOCK))
+
+        latest_num = latest_block['number']
+        logging.info(f'DawnPool from_block : {from_block}, latest_num : {latest_num}')
+        # Try to fetch and parse last 'Completed' event from the contract. 遍历从合约中获取并解析最后一个“已完成”事件。
+        step = 1000
+        for end in range(latest_block['number'], from_block, -step):
+            start = max(end - step + 1, from_block)
+            # 调用了 getLogs 方法来读取区块链上合约中 Completed 事件在指定区块高度范围内的日志,日志会被存储在 events 变量中
+            events = self.w3.lido_contracts.oracle.events.Completed.get_logs(fromBlock=start, toBlock=end)
+            # 判断 events 是否为空 如果存在符合条件的事件日志，获取最后一个事件，即 events[-1]，并从中提取出相应的信息
+            if events:
+                logging.info(f'DawnPool event is : {events}')
+                event = events[-1]
+                result.epoch = event['args']['epochId']
+                result.blockNumber = event.blockNumber
+                break
+
+        #  查询奖励库的地址(配置在环境变量里)对应账户在指定区块高度时的余额
+        result.rewardsVaultBalance = w3.eth.get_balance(
+            w3.to_checksum_address(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
+            block_identifier=result.blockNumber
+        )
+        logging.info(f'DawnPool result : {result}')
+        # If the epoch has been assigned from the last event (not the first run) 如果纪元是从最后一个事件（不是第一次运行）分配的
+        if result.epoch:
+            result.timestamp = self.get_timestamp_by_epoch(beacon_spec, result.epoch)
+        else:
+            # If it's the first run, we set timestamp to genesis time 如果是第一次运行，我们将时间戳设置为创世时间
+            result.timestamp = genesis_time
+        return result
+
+    def get_timestamp_by_epoch(self,beacon_spec, epoch_id):
+        """Required to calculate time-bound values such as APR"""
+        slots_per_epoch = beacon_spec[1]
+        seconds_per_slot = beacon_spec[2]
+        genesis_time = beacon_spec[3]
+        return genesis_time + slots_per_epoch * seconds_per_slot * epoch_id
 
     def _get_newly_exited_validators_by_modules(
         self,
@@ -281,7 +360,7 @@ class Accounting(BaseModule, ConsensusModule):
         logger.info({'msg': 'Simulate lido rebase for report.', 'value': simulated_tx.args})
 
         result = simulated_tx.call(
-            transaction={'from': self.w3.lido_contracts.accounting_oracle.address},
+            transaction={'from': self.w3.lido_contracts.oracle.address},
             block_identifier=blockstamp.block_hash,
         )
 

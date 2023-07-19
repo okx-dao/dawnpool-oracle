@@ -34,21 +34,45 @@
       },
       {
         "indexed": false,
-        "internalType": "uint128",
+        "internalType": "uint256",
         "name": "beaconBalance",
-        "type": "uint128"
+        "type": "uint256"
       },
       {
         "indexed": false,
-        "internalType": "uint128",
+        "internalType": "uint256",
         "name": "beaconValidators",
-        "type": "uint128"
+        "type": "uint256"
       },
       {
         "indexed": false,
-        "internalType": "uint128",
+        "internalType": "uint256",
         "name": "rewardsVaultBalance",
-        "type": "uint128"
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "exitedValidators",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "burnedPEthAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lastRequestIdToBeFulfilled",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "ethAmountToLock",
+        "type": "uint256"
       },
       {
         "indexed": false,
@@ -102,21 +126,45 @@
       },
       {
         "indexed": false,
-        "internalType": "uint128",
-        "name": "beaconBalance",
-        "type": "uint128"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint128",
+        "internalType": "uint256",
         "name": "beaconValidators",
-        "type": "uint128"
+        "type": "uint256"
       },
       {
         "indexed": false,
-        "internalType": "uint128",
-        "name": "_rewardsVaultBalance",
-        "type": "uint128"
+        "internalType": "uint256",
+        "name": "beaconBalance",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "rewardsVaultBalance",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "exitedValidators",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "burnedPEthAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lastRequestIdToBeFulfilled",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "ethAmountToLock",
+        "type": "uint256"
       }
     ],
     "name": "Completed",
@@ -360,6 +408,19 @@
   },
   {
     "inputs": [],
+    "name": "getFrameFirstEpochId",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "getLastCompletedEpochId",
     "outputs": [
       {
@@ -423,11 +484,6 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_dawnpool",
-        "type": "address"
-      },
-      {
         "internalType": "uint64",
         "name": "_epochsPerFrame",
         "type": "uint64"
@@ -469,29 +525,51 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_epochId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint64",
-        "name": "_beaconBalance",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint32",
-        "name": "_beaconValidators",
-        "type": "uint32"
-      },
-      {
-        "internalType": "uint64",
-        "name": "_rewardsVaultBalance",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint32",
-        "name": "_exitedValidators",
-        "type": "uint32"
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "epochId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "beaconBalance",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "beaconValidators",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "rewardsVaultBalance",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "exitedValidators",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "burnedPEthAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lastRequestIdToBeFulfilled",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "ethAmountToLock",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct DawnPoolOracle.ReportData",
+        "name": "data",
+        "type": "tuple"
       }
     ],
     "name": "reportBeacon",

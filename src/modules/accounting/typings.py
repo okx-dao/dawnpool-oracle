@@ -46,6 +46,48 @@ class ReportData:
             self.extra_data_items_count,
         )
 
+@dataclass
+class OracleReportData:
+    epoch_id: int
+    beacon_balance: int
+    beacon_validators: int
+    rewards_vault_balance: int
+    exited_validators: int
+    burned_peth_amount: int
+    last_request_id_to_be_fulfilled: int
+    eth_amount_to_lock: int
+
+    def as_tuple(self):
+        # Tuple with report in correct order
+        return (
+            self.epoch_id,
+            self.beacon_balance,
+            self.beacon_validators,
+            self.rewards_vault_balance,
+            self.exited_validators,
+            self.burned_peth_amount,
+            self.last_request_id_to_be_fulfilled,
+            self.eth_amount_to_lock,
+        )
+class PoolMetrics:
+    DEPOSIT_SIZE = int(32 * 1e18)
+    epoch = 0
+    finalized_epoch_beacon = 0
+    beaconBalance = 0
+    beaconValidators = 0
+    timestamp = 0
+    blockNumber = 0
+    bufferedBalance = 0
+    preDepositValidators = 0
+    depositedValidators = 0
+    activeValidatorBalance = 0
+    withdrawalVaultBalance = 0
+    rewardsVaultBalance = 0
+    exitedValidatorsCount = 0
+    burnedPethAmount = 0
+    lastRequestIdToBeFulfilled = 0
+    ethAmountToLock = 0
+    validatorsKeysNumber = None
 
 @dataclass
 class AccountingProcessingState:

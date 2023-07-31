@@ -167,9 +167,23 @@ class Accounting(BaseModule, ConsensusModule):
         logger.info({'msg': 'Fetch beacon spec.', 'value': beacon_spec})
         # 获取之前上报的数据
         prev_metrics = self.get_previous_metrics(beacon_spec,  ORACLE_FROM_BLOCK)
-        logger.info({'msg': 'Fetch prev metrics.', 'value': prev_metrics})
-        logging.info(f'Previously reported epoch: {prev_metrics.epoch}')
-        logging.info(f'Previously reported bufferedBalance: {prev_metrics.bufferedBalance}')
+        if prev_metrics:
+            logging.info(f'Previously reported epoch: {prev_metrics.epoch}')
+            logging.info(
+                f'Previously reported beaconBalance: {prev_metrics.beaconBalance} wei or {prev_metrics.beaconBalance / 1e18} ETH'
+            )
+            logging.info(
+                f'Previously reported bufferedBalance: {prev_metrics.bufferedBalance} wei or {prev_metrics.bufferedBalance / 1e18} ETH'
+            )
+            logging.info(f'Previous validator metrics: depositedValidators:{prev_metrics.depositedValidators}')
+            logging.info(f'Previous validator metrics: beaconValidators:{prev_metrics.beaconValidators}')
+            logging.info(f'Previous validator metrics: rewardsVaultBalance:{prev_metrics.rewardsVaultBalance}')
+            logging.info(
+                f'Timestamp of previous report:  {prev_metrics.timestamp}'
+            )
+
+        current_metrics = self.get_light_current_metrics(beacon_spec)
+        logging.info(f'Previously current_metrics: {current_metrics}')
 
         validators_count, cl_balance = self._get_consensus_lido_state(blockstamp)
 
@@ -246,6 +260,32 @@ class Accounting(BaseModule, ConsensusModule):
             # If it's the first run, we set timestamp to genesis time 如果是第一次运行，我们将时间戳设置为创世时间
             result.timestamp = genesis_time
         return result
+
+    def get_light_current_metrics(self, beacon_spec):
+        """Fetch current frame, buffered balance and epoch"""
+        # 每帧的epoch数
+        epochs_per_frame = beacon_spec[0]
+        partial_metrics = PoolMetrics()
+        partial_metrics.blockNumber = w3.eth.get_block('latest')[
+            'number']  # Get the epoch that is finalized and reportable
+        # 当前帧信息的数组  通过abi合约调用查询
+        current_frame = self.w3.lido_contracts.oracle.functions.getCurrentFrame().call()
+        # 当前帧所在的epoch，作为潜在的报告epoch
+        potentially_reportable_epoch = current_frame[0]
+        logging.info(f'Potentially reportable epoch: {potentially_reportable_epoch} (from ETH1 contract)')
+        # 获得最终确定的纪元
+        finalized_epoch_beacon = self.w3.cc.get_finalized_epoch()
+        # For Web3 client
+        # finalized_epoch_beacon = int(beacon.get_finality_checkpoint()['data']['finalized']['epoch'])
+        logging.info(f'Last finalized epoch: {finalized_epoch_beacon} (from Beacon)')
+        # //是向下取整  第二个通过计算得出的实际报告时代 计算信标链中已经最终化的时代数 finalized_epoch_beacon 所在的当前帧
+        partial_metrics.epoch = min(
+            potentially_reportable_epoch, (finalized_epoch_beacon // epochs_per_frame) * epochs_per_frame
+        )
+        partial_metrics.timestamp = self.get_timestamp_by_epoch(beacon_spec, partial_metrics.epoch)
+        partial_metrics.depositedValidators = self.w3.lido_contracts.pool.functions.getBeaconStat().call()[0]
+        partial_metrics.bufferedBalance = self.w3.lido_contracts.pool.functions.getBufferedEther().call()
+        return partial_metrics
 
     def get_timestamp_by_epoch(self,beacon_spec, epoch_id):
         """Required to calculate time-bound values such as APR"""

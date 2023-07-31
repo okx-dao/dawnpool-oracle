@@ -39,6 +39,7 @@ class ConsensusClient(HTTPProvider):
     API_GET_VALIDATORS = 'eth/v1/beacon/states/{}/validators'
     API_GET_SPEC = 'eth/v1/config/spec'
     API_GET_GENESIS = 'eth/v1/beacon/genesis'
+    api_beacon_head_finality_checkpoints = 'eth/v1/beacon/states/head/finality_checkpoints'
 
     def get_config_spec(self):
         """Spec: https://ethereum.github.io/beacon-APIs/#/Config/getSpec"""
@@ -46,6 +47,16 @@ class ConsensusClient(HTTPProvider):
         if not isinstance(data, dict):
             raise ValueError("Expected mapping response from getSpec")
         return BeaconSpecResponse.from_response(**data)
+
+    def get_finalized_epoch(self):
+        data, _ = self._get(self.api_beacon_head_finality_checkpoints)
+        logging.info(f'Potentially get_finalized_epoch: {data}')
+        try:
+            return int(data['finalized']['epoch'])
+            # return int(data.json()['data']['finalized']['epoch'])
+        except KeyError as error:
+            logging.error(f'Response [{data.status_code}] with text: {str(data.text)} was returned.')
+            raise KeyError from error
 
     def get_genesis(self):
         """

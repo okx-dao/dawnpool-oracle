@@ -1,8 +1,12 @@
+import binascii
+import decimal
 import logging
 import os
+import sys
 from collections import defaultdict
 from time import sleep
 
+from web3.exceptions import ContractLogicError
 from web3.types import Wei
 from web3_multi_provider import MultiProvider
 
@@ -23,6 +27,8 @@ from src.metrics.prometheus.accounting import (
     ACCOUNTING_WITHDRAWAL_VAULT_BALANCE_WEI
 )
 from src.metrics.prometheus.duration_meter import duration_meter
+from src.modules.submodules.typings import ChainConfig
+from src.providers.consensus.typings import ValidatorStatus
 from src.services.validator_state import LidoValidatorStateService
 from src.modules.submodules.consensus import ConsensusModule
 from src.modules.submodules.oracle_module import BaseModule, ModuleExecuteDelay
@@ -34,7 +40,6 @@ from src.utils.cache import global_lru_cache as lru_cache
 from src.variables import ALLOW_REPORTING_IN_BUNKER_MODE
 from src.web3py.typings import Web3
 from src.web3py.extensions.lido_validators import StakingModule, NodeOperatorGlobalIndex, StakingModuleId
-
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +59,7 @@ w3 = Web3(provider)
 if not w3.is_connected():
     logging.error('ETH node connection error!')
     exit(1)
+
 
 class Accounting(BaseModule, ConsensusModule):
     """
@@ -82,12 +88,15 @@ class Accounting(BaseModule, ConsensusModule):
     def execute_module(self, last_finalized_blockstamp: BlockStamp) -> ModuleExecuteDelay:
         report_blockstamp = self.get_blockstamp_for_report(last_finalized_blockstamp)
 
-        if report_blockstamp:
-            self.process_report(report_blockstamp)
-            # Third phase of report. Specific for accounting.
-            self.process_extra_data(report_blockstamp)
-            return ModuleExecuteDelay.NEXT_SLOT
+        if not report_blockstamp:
+            return ModuleExecuteDelay.NEXT_FINALIZED_EPOCH
+        # if report_blockstamp:
+        #     self.process_report(report_blockstamp)
+        #     # Third phase of report. Specific for accounting.
+        #     self.process_extra_data(report_blockstamp)
+        #     return ModuleExecuteDelay.NEXT_SLOT
 
+        self.process_report(report_blockstamp)
         return ModuleExecuteDelay.NEXT_FINALIZED_EPOCH
 
     def process_extra_data(self, blockstamp: ReferenceBlockStamp):
@@ -166,7 +175,7 @@ class Accounting(BaseModule, ConsensusModule):
         beacon_spec = self.w3.lido_contracts.oracle.functions.getBeaconSpec().call()
         logger.info({'msg': 'Fetch beacon spec.', 'value': beacon_spec})
         # 获取之前上报的数据
-        prev_metrics = self.get_previous_metrics(beacon_spec,  ORACLE_FROM_BLOCK)
+        prev_metrics = self.get_previous_metrics(beacon_spec, ORACLE_FROM_BLOCK)
         if prev_metrics:
             logging.info(f'Previously reported epoch: {prev_metrics.epoch}')
             logging.info(
@@ -184,40 +193,61 @@ class Accounting(BaseModule, ConsensusModule):
 
         current_metrics = self.get_light_current_metrics(beacon_spec)
         logging.info(f'Previously current_metrics: {current_metrics}')
+        logging.info(
+            f'Currently Metrics epoch: {current_metrics.epoch} Prev Metrics epoch {prev_metrics.epoch} '
+        )
+        # 已经提交过
+        if current_metrics.epoch <= prev_metrics.epoch:
+            logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
 
-        validators_count, cl_balance = self._get_consensus_lido_state(blockstamp)
+        # Get full metrics using polling (get keys from registry, get balances from beacon)
+        current_metrics = self.get_full_current_metrics(blockstamp, beacon_spec, current_metrics)
 
-        staking_module_ids_list, exit_validators_count_list = self._get_newly_exited_validators_by_modules(blockstamp)
-
-        extra_data = self.lido_validator_state_service.get_extra_data(blockstamp, self.get_chain_config(blockstamp))
-        finalization_share_rate, finalization_batches = self._get_finalization_data(blockstamp)
-
-        report_data = ReportData(
-            consensus_version=self.CONSENSUS_VERSION,
-            ref_slot=blockstamp.ref_slot,
-            validators_count=validators_count,
-            cl_balance_gwei=cl_balance,
-            staking_module_id_with_exited_validators=staking_module_ids_list,
-            count_exited_validators_by_staking_module=exit_validators_count_list,
-            withdrawal_vault_balance=self.w3.lido_contracts.get_withdrawal_balance(blockstamp),
-            el_rewards_vault_balance=self.w3.lido_contracts.get_el_vault_balance(blockstamp),
-            shares_requested_to_burn=self.get_shares_to_burn(blockstamp),
-            withdrawal_finalization_batches=finalization_batches,
-            finalization_share_rate=finalization_share_rate,
-            is_bunker=self._is_bunker(blockstamp),
-            extra_data_format=extra_data.format,
-            extra_data_hash=extra_data.data_hash,
-            extra_data_items_count=extra_data.items_count,
+        report_data = OracleReportData(
+            epoch_id=current_metrics.epoch,
+            beacon_balance=current_metrics.activeValidatorBalance,
+            beacon_validators=current_metrics.beaconValidators,
+            rewards_vault_balance=current_metrics.rewardsVaultBalance,
+            exited_validators=current_metrics.exitedValidatorsCount,
+            burned_peth_amount=current_metrics.burnedPethAmount,
+            last_request_id_to_be_fulfilled=current_metrics.lastRequestIdToBeFulfilled,
+            eth_amount_to_lock=current_metrics.ethAmountToLock
         )
 
-        ACCOUNTING_IS_BUNKER.set(report_data.is_bunker)
-        ACCOUNTING_CL_BALANCE_GWEI.set(report_data.cl_balance_gwei)
-        ACCOUNTING_EL_REWARDS_VAULT_BALANCE_WEI.set(report_data.el_rewards_vault_balance)
-        ACCOUNTING_WITHDRAWAL_VAULT_BALANCE_WEI.set(report_data.withdrawal_vault_balance)
+
+        # validators_count, cl_balance = self._get_consensus_lido_state(blockstamp)
+        #
+        # staking_module_ids_list, exit_validators_count_list = self._get_newly_exited_validators_by_modules(blockstamp)
+        #
+        # extra_data = self.lido_validator_state_service.get_extra_data(blockstamp, self.get_chain_config(blockstamp))
+        # finalization_share_rate, finalization_batches = self._get_finalization_data(blockstamp)
+        #
+        # report_data = ReportData(
+        #     consensus_version=self.CONSENSUS_VERSION,
+        #     ref_slot=blockstamp.ref_slot,
+        #     validators_count=validators_count,
+        #     cl_balance_gwei=cl_balance,
+        #     staking_module_id_with_exited_validators=staking_module_ids_list,
+        #     count_exited_validators_by_staking_module=exit_validators_count_list,
+        #     withdrawal_vault_balance=self.w3.lido_contracts.get_withdrawal_balance(blockstamp),
+        #     el_rewards_vault_balance=self.w3.lido_contracts.get_el_vault_balance(blockstamp),
+        #     shares_requested_to_burn=self.get_shares_to_burn(blockstamp),
+        #     withdrawal_finalization_batches=finalization_batches,
+        #     finalization_share_rate=finalization_share_rate,
+        #     is_bunker=self._is_bunker(blockstamp),
+        #     extra_data_format=extra_data.format,
+        #     extra_data_hash=extra_data.data_hash,
+        #     extra_data_items_count=extra_data.items_count,
+        # )
+        #
+        # ACCOUNTING_IS_BUNKER.set(report_data.is_bunker)
+        # ACCOUNTING_CL_BALANCE_GWEI.set(report_data.cl_balance_gwei)
+        # ACCOUNTING_EL_REWARDS_VAULT_BALANCE_WEI.set(report_data.el_rewards_vault_balance)
+        # ACCOUNTING_WITHDRAWAL_VAULT_BALANCE_WEI.set(report_data.withdrawal_vault_balance)
 
         return report_data
 
-    def get_previous_metrics(self, beacon_spec,  from_block=0) -> PoolMetrics:
+    def get_previous_metrics(self, beacon_spec, from_block=0) -> PoolMetrics:
         logging.info('Getting previously reported numbers (will be fetched from events)...')
         genesis_time = beacon_spec[3]
         result = PoolMetrics()
@@ -287,7 +317,163 @@ class Accounting(BaseModule, ConsensusModule):
         partial_metrics.bufferedBalance = self.w3.lido_contracts.pool.functions.getBufferedEther().call()
         return partial_metrics
 
-    def get_timestamp_by_epoch(self,beacon_spec, epoch_id):
+    def get_full_current_metrics(self, blockstamp: ReferenceBlockStamp,
+                                 beacon_spec: ChainConfig,
+                                 partial_metrics: PoolMetrics) -> PoolMetrics:
+        """The oracle fetches all the required states from ETH1 and ETH2 (validator balances)"""
+        slots_per_epoch = beacon_spec[1]
+        logging.info(f'Reportable slots_per_epoch: {slots_per_epoch} ,partial_metrics.epoch: {partial_metrics.epoch}')
+        slot = partial_metrics.epoch * slots_per_epoch
+        logging.info(f'Reportable state, epoch:{partial_metrics.epoch} slot:{slot}')
+
+        block_number = self.w3.cc.get_block_by_beacon_slot(slot, beacon_spec[0], beacon_spec[1])
+
+        logging.info(f'Validator block_number: {block_number}')
+
+        #  获取注册的验证者的key 通过abi获取
+        validators_keys = self.w3.lido_contracts.registry.functions.getNodeValidators(0, 0).call()[1]
+
+        hex_validators_keys = tuple('0x' + binascii.hexlify(pk).decode('ascii') for pk in validators_keys)
+
+        logging.info({'msg': 'Fetch dawn pool status keys.', 'value': hex_validators_keys})
+        logging.info(f'Total validator keys in registry: {len(validators_keys)}')
+        full_metrics = partial_metrics
+
+        validators = self.w3.cc.get_pub_key_validators(blockstamp, hex_validators_keys)
+        logger.info({'msg': 'Fetch dawn pool validators.', 'value': validators})
+
+        validators_count = 0
+        total_balance = 0
+        active_validators_balance = 0
+        exited_validators_count = 0
+
+        # todo
+        for validator in validators:
+            logging.info(f' validator info: {validator}')
+            total_balance += int(validator.balance)
+            if validator.status in [ValidatorStatus.ACTIVE_ONGOING, ValidatorStatus.WITHDRAWAL_POSSIBLE,
+                                    ValidatorStatus.ACTIVE_EXITING,
+                                    ValidatorStatus.ACTIVE_SLASHED, ValidatorStatus.EXITED_SLASHED,
+                                    ValidatorStatus.EXITED_UNSLASHED
+                                    ]:
+                # 需要上传激活的验证者数量
+                validators_count += 1
+                active_validators_balance += int(validator.balance)
+            elif validator.status in ['withdrawal_done']:
+                exited_validators_count += 1
+
+        full_metrics.beaconBalance = total_balance
+        full_metrics.activeValidatorBalance = active_validators_balance
+        full_metrics.beaconValidators = validators_count
+        full_metrics.exitedValidatorsCount = exited_validators_count
+
+        logging.info(
+            f'DawnPool validators\' beaconBalance: {full_metrics.beaconBalance},beaconValidators:{full_metrics.beaconValidators}'
+            f',activeValidatorBalance:{full_metrics.activeValidatorBalance},exitedValidatorsCount:{full_metrics.exitedValidatorsCount}'
+        )
+
+        #  查询奖励库的地址当前时间对应账户在指定区块高度时的余额
+        full_metrics.rewardsVaultBalance = w3.eth.get_balance(
+            w3.to_checksum_address(rewards_vault_address.replace('0x010000000000000000000000', '0x')),
+            block_identifier=block_number
+        )
+        logging.info(f'DawnPool the balance of the reward pool address : {full_metrics.rewardsVaultBalance}')
+
+        # 获取lastRequestIdToBeFulfilled和ethAmountToLock
+        buffered_ether = self.w3.lido_contracts.pool.functions.getBufferedEther().call()
+        # 返回数组切片 returns (WithdrawRequest[] memory unfulfilledWithdrawRequestQueue)
+        unfulfilled_withdraw_request_queue = self.w3.lido_contracts.withdraw.functions.getUnfulfilledWithdrawRequestQueue().call()
+        logging.info(f'Dawn getUnfulfilledWithdrawRequestQueue : {unfulfilled_withdraw_request_queue}')
+
+        request_sum = 0
+        target_index = 0
+        target_value = 0
+        latest_index = 0
+
+        logging.info(
+            f'Dawn validators full_metrics: {full_metrics.beaconValidators}, {full_metrics.activeValidatorBalance},'
+            f'{full_metrics.rewardsVaultBalance},{full_metrics.exitedValidatorsCount}')
+
+        total_ether = 0
+        total_peth = 0
+        # 计算汇率：预估当前数据提交后，汇率是多少  没有奖励有异常进程停止，捕获异常
+        # function preCalculateExchangeRate(uint256 beaconValidators, uint256 beaconBalance,uint256 availableRewards,
+        # uint256 exitedValidators) external view returns (uint256 totalEther, uint256 totalPEth);
+        try:
+            total_ether, total_peth = self.w3.lido_contracts.pool.functions.preCalculateExchangeRate(
+                full_metrics.beaconValidators,
+                full_metrics.activeValidatorBalance,
+                full_metrics.rewardsVaultBalance,
+                full_metrics.exitedValidatorsCount).call()
+        except ContractLogicError as e:
+            logging.warning(f'Dawn get pre_calculate_exchange_rate total_ether,total_peth throw Exception: {e} ')
+            # 捕获异常,退出进程 ToDo
+            # sys.exit()
+
+        logging.info(f'Dawn pre_calculate_exchange_rate total_ether: {total_ether},total_peth: {total_peth}')
+        # 遍历数组  从1开始遍历
+        for i in range(1, len(unfulfilled_withdraw_request_queue)):
+            if len(unfulfilled_withdraw_request_queue) < 2:
+                break
+
+            # struct WithdrawRequest {address owner;uint256 cumulativePEth; uint256 maxCumulativeClaimableEther;
+            # uint256 createdTime; bool claimed; }
+            # 赎回请求时汇率计算得到的ether
+            eth_amount1 = unfulfilled_withdraw_request_queue[i][2] - unfulfilled_withdraw_request_queue[i - 1][2]
+            logging.info(f'Dawn eth_amount1 : {eth_amount1}')
+            # 赎回的peth量
+            peth = unfulfilled_withdraw_request_queue[i][1] - unfulfilled_withdraw_request_queue[i - 1][1]
+            logging.info(f'Dawn peth : {peth}, original eth_amount2: {peth * total_ether / total_peth}')
+            # 按照当前汇率去计算 uint256 totalEther[0], uint256 totalPEth[1]
+            # eth_amount2 = 0
+            if total_peth == 0:
+                eth_amount2 = 0
+            else:
+                eth_amount2 = decimal.Decimal(peth) * decimal.Decimal(total_ether) / decimal.Decimal(total_peth)
+
+            if eth_amount2 == 0:
+                eth_amount2_int = 0
+            else:
+                eth_amount2_int = int(eth_amount2.quantize(decimal.Decimal('1'), rounding=decimal.ROUND_DOWN))
+            # eth_amount2 = peth * total_ether / total_peth
+            logging.info(f'Dawn eth_amount2 : {eth_amount2}, eth_amount2_int: {eth_amount2_int}')
+            actual_amount = min(eth_amount1, eth_amount2_int)
+            logging.info(f'Dawn actual_amount : {actual_amount}')
+
+            if request_sum + actual_amount > buffered_ether + full_metrics.rewardsVaultBalance:
+                target_index = i - 1
+                target_value = request_sum
+                logging.info(
+                    f'Dawn getUnfulfilledWithdrawRequestQueue  target_index: {i}, target_value: {target_value}')
+                break
+            request_sum += actual_amount
+            target_index = len(unfulfilled_withdraw_request_queue) - 1
+            target_value = request_sum
+
+        logging.info(f'Dawn request_sum : {request_sum}')
+
+        # returns (uint256 lastFulfillmentRequestId, uint256 lastRequestId, uint256 lastCheckpointIndex);
+        withdraw_queue_stat = self.w3.lido_contracts.withdraw.functions.getWithdrawQueueStat().call()
+        logging.info(
+            f'Dawn withdraw_queue_stat : {withdraw_queue_stat[0]},{withdraw_queue_stat[1]},{withdraw_queue_stat[2]}')
+
+        latest_index = withdraw_queue_stat[0] + target_index
+
+        full_metrics.lastRequestIdToBeFulfilled = latest_index
+        full_metrics.ethAmountToLock = target_value
+        logging.info(f'Dawn latest_index : {latest_index},target_value: {target_value}, ')
+
+        # 获取燃币金额
+        burner_contract_to_burned = self.w3.lido_contracts.burner.functions.getPEthBurnRequest().call()
+        withdraw_to_burned = unfulfilled_withdraw_request_queue[target_index][1] - unfulfilled_withdraw_request_queue[0][1]
+        full_metrics.burnedPethAmount = burner_contract_to_burned + withdraw_to_burned
+        logging.info(
+            f'Dawn validators burnedPethAmount: {full_metrics.burnedPethAmount},burner_contract_to_burned:{burner_contract_to_burned},withdraw_to_burned:{withdraw_to_burned}')
+
+        logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
+        return full_metrics
+
+    def get_timestamp_by_epoch(self, beacon_spec, epoch_id):
         """Required to calculate time-bound values such as APR"""
         slots_per_epoch = beacon_spec[1]
         seconds_per_slot = beacon_spec[2]
@@ -295,8 +481,8 @@ class Accounting(BaseModule, ConsensusModule):
         return genesis_time + slots_per_epoch * seconds_per_slot * epoch_id
 
     def _get_newly_exited_validators_by_modules(
-        self,
-        blockstamp: ReferenceBlockStamp,
+            self,
+            blockstamp: ReferenceBlockStamp,
     ) -> tuple[list[StakingModuleId], list[int]]:
         """
         Calculate exited validators count in all modules.
@@ -309,8 +495,8 @@ class Accounting(BaseModule, ConsensusModule):
 
     @staticmethod
     def get_updated_modules_stats(
-        staking_modules: list[StakingModule],
-        exited_validators_by_no: dict[NodeOperatorGlobalIndex, int],
+            staking_modules: list[StakingModule],
+            exited_validators_by_no: dict[NodeOperatorGlobalIndex, int],
     ) -> tuple[list[StakingModuleId], list[int]]:
         """Returns exited validators count by node operators that should be updated."""
         module_stats: dict[StakingModuleId, int] = defaultdict(int)
@@ -368,9 +554,9 @@ class Accounting(BaseModule, ConsensusModule):
         return self.simulate_rebase_after_report(blockstamp, el_rewards=el_rewards)
 
     def simulate_rebase_after_report(
-        self,
-        blockstamp: ReferenceBlockStamp,
-        el_rewards: Wei,
+            self,
+            blockstamp: ReferenceBlockStamp,
+            el_rewards: Wei,
     ) -> LidoReportRebase:
         """
         To calculate how much withdrawal request protocol can finalize - needs finalization share rate after this report

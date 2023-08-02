@@ -204,6 +204,9 @@ class Accounting(BaseModule, ConsensusModule):
         # Get full metrics using polling (get keys from registry, get balances from beacon)
         current_metrics = self.get_full_current_metrics(blockstamp, beacon_spec, current_metrics)
 
+        # 对比
+        self.compare_pool_metrics(prev_metrics, current_metrics)
+
         report_data = OracleReportData(
             epoch_id=current_metrics.epoch,
             beacon_balance=current_metrics.activeValidatorBalance,
@@ -376,7 +379,7 @@ class Accounting(BaseModule, ConsensusModule):
                 full_metrics.rewardsVaultBalance,
                 full_metrics.exitedValidatorsCount).call()
         except ContractLogicError as e:
-            logging.warning(f'Dawn get pre_calculate_exchange_rate total_ether,total_peth throw Exception: {e} ')
+            logging.warning(f'Dawn get pre_calculate_exchange_rate total_ether,total_peth throw Exception: {str(e)} ')
             # 捕获异常,退出进程 ToDo
             # sys.exit()
 
@@ -442,6 +445,89 @@ class Accounting(BaseModule, ConsensusModule):
 
         logging.info(f'DawnPool validators visible on Beacon: {full_metrics.beaconValidators}')
         return full_metrics
+
+    @staticmethod
+    def compare_pool_metrics(previous: PoolMetrics, current: PoolMetrics) -> bool:
+        """Describes the economics of metrics change.
+        Helps the Node operator to understand the effect of firing composed TX
+        Returns true on suspicious metrics"""
+        warnings = False
+        assert previous.DEPOSIT_SIZE == current.DEPOSIT_SIZE
+        DEPOSIT_SIZE = previous.DEPOSIT_SIZE
+        # 间隔时间
+        delta_seconds = current.timestamp - previous.timestamp
+        # 新增验证者
+        appeared_validators = current.beaconValidators - previous.beaconValidators
+        logging.info(f'Time delta:  {delta_seconds} s')
+        logging.info(
+            f'depositedValidators before:{previous.depositedValidators} after:{current.depositedValidators} change:{current.depositedValidators - previous.depositedValidators}'
+        )
+
+        # 信标验证者数量意外减少
+        if current.beaconValidators < previous.beaconValidators:
+            # warnings = True
+            logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            logging.warning('The number of beacon validators unexpectedly decreased!')
+            logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+        logging.info(
+            f'beaconValidators before:{previous.beaconValidators} after:{current.beaconValidators} change:{appeared_validators}'
+        )
+        logging.info(
+            f'beaconBalance before:{previous.beaconBalance} after:{current.beaconBalance} change:{current.beaconBalance - previous.beaconBalance}'
+        )
+        logging.info(
+            f'bufferedBalance before:{previous.bufferedBalance} after:{current.bufferedBalance} change:{current.bufferedBalance - previous.bufferedBalance}'
+        )
+        logging.info(f'activeValidatorBalance now:{current.activeValidatorBalance} ')
+
+        # 验证者的币余额期望值(reward_base)  根据当前 epoch 中出现的有效验证者数量和每个验证者的抵押金额(DEPOSIT_SIZE) 计算出当前 epoch 的奖励基数 + 上一个epoch该验证者的余额
+        reward_base = appeared_validators * DEPOSIT_SIZE + previous.activeValidatorBalance
+        # 验证者当前epoch应该获得的奖励 = 当前epoch结束时验证者余额 - 验证者的币余额期望值
+        reward = current.activeValidatorBalance - reward_base
+
+        if not delta_seconds:
+            logging.info('No time delta between current and previous epochs. Skip APR calculations.')
+            assert reward == 0
+            assert current.beaconValidators == previous.beaconValidators
+            return
+
+        # APR calculation
+        if current.activeValidatorBalance == 0:
+            daily_reward_rate = 0
+        else:
+            days = delta_seconds / 60 / 60 / 24
+            daily_reward_rate = reward / current.activeValidatorBalance / days
+
+        apr = daily_reward_rate * 365
+
+        if reward >= 0:
+            logging.info(f'Validators were rewarded {reward} wei or {reward / 1e18} ETH')
+            logging.info(f'Daily staking reward rate for active validators: {daily_reward_rate * 100:.8f} %')
+            logging.info(f'Staking APR for active validators: {apr * 100:.4f} %')
+            if apr > current.MAX_APR:
+                logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                logging.warning('Staking APR too high! Talk to your fellow oracles before submitting!')
+                logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+            if apr < current.MIN_APR:
+                logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                logging.warning('Staking APR too low! Talk to your fellow oracles before submitting!')
+                logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+        else:
+            logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            logging.warning(f'Penalties will decrease totalPooledEther by {-reward} wei or {-reward / 1e18} ETH')
+            logging.warning('Validators were either slashed or suffered penalties!')
+            logging.warning('Talk to your fellow oracles before submitting!')
+            logging.warning('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+        if reward == 0:
+            logging.info(
+                'Beacon balances stay intact (neither slashed nor rewarded). So this report won\'t have any economical impact on the pool.'
+            )
+
+        return warnings
 
     def get_timestamp_by_epoch(self, beacon_spec, epoch_id):
         """Required to calculate time-bound values such as APR"""

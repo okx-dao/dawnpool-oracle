@@ -71,6 +71,8 @@ class OracleReportData:
         )
 class PoolMetrics:
     DEPOSIT_SIZE = int(32 * 1e18)
+    MAX_APR = 0.15
+    MIN_APR = 0.01
     epoch = 0
     finalized_epoch_beacon = 0
     beaconBalance = 0

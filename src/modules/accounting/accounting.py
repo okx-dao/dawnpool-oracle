@@ -192,13 +192,14 @@ class Accounting(BaseModule, ConsensusModule):
             )
 
         current_metrics = self.get_light_current_metrics(beacon_spec)
-        logging.info(f'Previously current_metrics: {current_metrics}')
         logging.info(
             f'Currently Metrics epoch: {current_metrics.epoch} Prev Metrics epoch {prev_metrics.epoch} '
         )
         # 已经提交过
         if current_metrics.epoch <= prev_metrics.epoch:
             logging.info(f'Currently reportable epoch {current_metrics.epoch} has already been reported. Skipping it.')
+            # 已经上报过,退出进程
+            # sys.exit()
 
         # Get full metrics using polling (get keys from registry, get balances from beacon)
         current_metrics = self.get_full_current_metrics(blockstamp, beacon_spec, current_metrics)
@@ -214,37 +215,6 @@ class Accounting(BaseModule, ConsensusModule):
             eth_amount_to_lock=current_metrics.ethAmountToLock
         )
 
-
-        # validators_count, cl_balance = self._get_consensus_lido_state(blockstamp)
-        #
-        # staking_module_ids_list, exit_validators_count_list = self._get_newly_exited_validators_by_modules(blockstamp)
-        #
-        # extra_data = self.lido_validator_state_service.get_extra_data(blockstamp, self.get_chain_config(blockstamp))
-        # finalization_share_rate, finalization_batches = self._get_finalization_data(blockstamp)
-        #
-        # report_data = ReportData(
-        #     consensus_version=self.CONSENSUS_VERSION,
-        #     ref_slot=blockstamp.ref_slot,
-        #     validators_count=validators_count,
-        #     cl_balance_gwei=cl_balance,
-        #     staking_module_id_with_exited_validators=staking_module_ids_list,
-        #     count_exited_validators_by_staking_module=exit_validators_count_list,
-        #     withdrawal_vault_balance=self.w3.lido_contracts.get_withdrawal_balance(blockstamp),
-        #     el_rewards_vault_balance=self.w3.lido_contracts.get_el_vault_balance(blockstamp),
-        #     shares_requested_to_burn=self.get_shares_to_burn(blockstamp),
-        #     withdrawal_finalization_batches=finalization_batches,
-        #     finalization_share_rate=finalization_share_rate,
-        #     is_bunker=self._is_bunker(blockstamp),
-        #     extra_data_format=extra_data.format,
-        #     extra_data_hash=extra_data.data_hash,
-        #     extra_data_items_count=extra_data.items_count,
-        # )
-        #
-        # ACCOUNTING_IS_BUNKER.set(report_data.is_bunker)
-        # ACCOUNTING_CL_BALANCE_GWEI.set(report_data.cl_balance_gwei)
-        # ACCOUNTING_EL_REWARDS_VAULT_BALANCE_WEI.set(report_data.el_rewards_vault_balance)
-        # ACCOUNTING_WITHDRAWAL_VAULT_BALANCE_WEI.set(report_data.withdrawal_vault_balance)
-
         return report_data
 
     def get_previous_metrics(self, beacon_spec, from_block=0) -> PoolMetrics:
@@ -256,8 +226,8 @@ class Accounting(BaseModule, ConsensusModule):
         # 缓冲余额(将缓冲的 eth 存入质押合约并将分块存款分配给节点运营商)
         result.bufferedBalance = self.w3.lido_contracts.pool.functions.getBufferedEther().call()
         # Calculate the earliest block to limit scanning depth 计算最早的块以限制扫描深度
-        # 每个 ETH1 块的秒数 正常12s 出一个块 设置14s为了遍历
-        SECONDS_PER_ETH1_BLOCK = 14
+        # 每个 ETH1 块的秒数 正常12s 出一个块
+        SECONDS_PER_ETH1_BLOCK = 12
         latest_block = w3.eth.get_block('latest')
         from_block = max(from_block, int((latest_block['timestamp'] - genesis_time) / SECONDS_PER_ETH1_BLOCK))
 
@@ -479,36 +449,6 @@ class Accounting(BaseModule, ConsensusModule):
         seconds_per_slot = beacon_spec[2]
         genesis_time = beacon_spec[3]
         return genesis_time + slots_per_epoch * seconds_per_slot * epoch_id
-
-    def _get_newly_exited_validators_by_modules(
-            self,
-            blockstamp: ReferenceBlockStamp,
-    ) -> tuple[list[StakingModuleId], list[int]]:
-        """
-        Calculate exited validators count in all modules.
-        Exclude modules without changes from the report.
-        """
-        staking_modules = self.w3.lido_validators.get_staking_modules(blockstamp)
-        exited_validators = self.lido_validator_state_service.get_exited_lido_validators(blockstamp)
-
-        return self.get_updated_modules_stats(staking_modules, exited_validators)
-
-    @staticmethod
-    def get_updated_modules_stats(
-            staking_modules: list[StakingModule],
-            exited_validators_by_no: dict[NodeOperatorGlobalIndex, int],
-    ) -> tuple[list[StakingModuleId], list[int]]:
-        """Returns exited validators count by node operators that should be updated."""
-        module_stats: dict[StakingModuleId, int] = defaultdict(int)
-
-        for (module_id, _), validators_exited_count in exited_validators_by_no.items():
-            module_stats[module_id] += validators_exited_count
-
-        for module in staking_modules:
-            if module_stats[module.id] == module.exited_validators_count:
-                del module_stats[module.id]
-
-        return list(module_stats.keys()), list(module_stats.values())
 
     @lru_cache(maxsize=1)
     def _get_consensus_lido_state(self, blockstamp: ReferenceBlockStamp) -> tuple[int, Gwei]:

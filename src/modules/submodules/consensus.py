@@ -288,17 +288,21 @@ class ConsensusModule(ABC):
         report_data = self.build_report(blockstamp)
         logger.info({'msg': 'Build report.', 'value': report_data})
 
-        eject_count = report_data[1]
-        logger.info({'msg': 'Build report.', 'eject_count': eject_count})
-        # eject_count = 0时不上报，节省gas
-        if eject_count == 0:
-            logger.warning({
-                'msg': f'Process report eject_count is 0, save gas fee and do not report '
-            })
-        else:
-            report_hash = self._encode_data_hash(report_data)
-            logger.info({'msg': 'Calculate report hash.', 'value': report_hash})
-            self._process_report_data(blockstamp, report_data, report_hash)
+        # eject_count = report_data[1]
+        # logger.info({'msg': 'Build report.', 'eject_count': eject_count})
+        # # eject_count = 0时不上报，节省gas
+        # if eject_count == 0:
+        #     logger.warning({
+        #         'msg': f'Process report eject_count is 0, save gas fee and do not report '
+        #     })
+        # else:
+        #     report_hash = self._encode_data_hash(report_data)
+        #     logger.info({'msg': 'Calculate report hash.', 'value': report_hash})
+        #     self._process_report_data(blockstamp, report_data, report_hash)
+
+        report_hash = self._encode_data_hash(report_data)
+        logger.info({'msg': 'Calculate report hash.', 'value': report_hash})
+        self._process_report_data(blockstamp, report_data, report_hash)
 
         # We need to check whether report has unexpected data before sending.
         # otherwise we have to check it manually.
@@ -411,7 +415,8 @@ class ConsensusModule(ABC):
 
     def _encode_data_hash(self, report_data: tuple):
         # The Accounting Oracle and Ejector Bus has same named method to report data
-        report_function_name = 'submitReportData'
+        # todo Accounting Oracle(reportBeacon) 和 Ejector Bus(submitReportData) method应该一致
+        report_function_name = 'reportBeacon'
 
         report_function_abi = next(x for x in self.report_contract.abi if x.get('name') == report_function_name)
 
@@ -435,7 +440,9 @@ class ConsensusModule(ABC):
         self.w3.transaction.check_and_send_transaction(tx, variables.ACCOUNT)
 
     def _submit_report(self, report: tuple):
-        tx = self.report_contract.functions.submitReportData(report)
+        # tx = self.report_contract.functions.submitReportData(report)
+        # todo
+        tx = self.report_contract.functions.reportBeacon(report)
 
         self.w3.transaction.check_and_send_transaction(tx, variables.ACCOUNT)
 

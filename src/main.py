@@ -38,13 +38,13 @@ def main(module_name: OracleModule):
             **build_info,
             'module': module_name,
             'ACCOUNT': variables.ACCOUNT.address if variables.ACCOUNT else 'Dry',
-            'LIDO_LOCATOR_ADDRESS': variables.LIDO_LOCATOR_ADDRESS,
+            # 'LIDO_LOCATOR_ADDRESS': variables.LIDO_LOCATOR_ADDRESS,
             'MAX_CYCLE_LIFETIME_IN_SECONDS': variables.MAX_CYCLE_LIFETIME_IN_SECONDS,
         },
     })
     ENV_VARIABLES_INFO.info({
         "ACCOUNT": str(variables.ACCOUNT.address) if variables.ACCOUNT else 'Dry',
-        "LIDO_LOCATOR_ADDRESS": str(variables.LIDO_LOCATOR_ADDRESS),
+        # "LIDO_LOCATOR_ADDRESS": str(variables.LIDO_LOCATOR_ADDRESS),
         "FINALIZATION_BATCH_MAX_REQUEST_COUNT": str(variables.FINALIZATION_BATCH_MAX_REQUEST_COUNT),
         "MAX_CYCLE_LIFETIME_IN_SECONDS": str(variables.MAX_CYCLE_LIFETIME_IN_SECONDS),
     })
@@ -138,6 +138,6 @@ if __name__ == '__main__':
 
         sys.exit(check())
 
-    errors = variables.check_all_required_variables()
-    variables.raise_from_errors(errors)
+    # errors = variables.check_all_required_variables()
+    # variables.raise_from_errors(errors)
     main(module)

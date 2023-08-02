@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 LiteralState = Literal['head', 'genesis', 'finalized', 'justified']
 
 
+def BeaconBlockNotFoundError():
+    pass
+
+
 class ConsensusClient(HTTPProvider):
     """
     API specifications can be found here
@@ -57,6 +61,27 @@ class ConsensusClient(HTTPProvider):
         except KeyError as error:
             logging.error(f'Response [{data.status_code}] with text: {str(data.text)} was returned.')
             raise KeyError from error
+        
+    def get_block_by_beacon_slot(self, slot: int, epochs_per_frame: int, slots_per_epoch: int):
+
+        data, _ = self._get(self.API_GET_BLOCK_DETAILS.format(slot))
+        # logging.info(f'Potentially get_block_by_beacon_slot: {data}')
+        init_slot = slot
+        # 下一帧结束之前结束
+        # while data.code == 404:
+        #     logging.info(f'slot missed: {slot}, next slot {slot + 1}')
+        #     # 遍历到下一帧截止前
+        #     if slot < init_slot + epochs_per_frame * slots_per_epoch:
+        #         slot += 1
+        #         data, _ = self._get(self.API_GET_BLOCK_DETAILS.format(slot))
+        #     else:
+        #         raise BeaconBlockNotFoundError()
+
+        try:
+            return int(data['message']['body']['execution_payload']['block_number'])
+        except KeyError as error:
+            logging.error(f'Response [{data.code}] with text: {str(data.text)} was returned.')
+            raise error
 
     def get_genesis(self):
         """

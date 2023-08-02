@@ -24,7 +24,7 @@ if MEMBER_PRIV_KEY:
     ACCOUNT = Account.from_key(MEMBER_PRIV_KEY)  # False-positive. pylint: disable=no-value-for-parameter
 
 # - App specific -
-LIDO_LOCATOR_ADDRESS = os.getenv('LIDO_LOCATOR_ADDRESS')
+# LIDO_LOCATOR_ADDRESS = os.getenv('LIDO_LOCATOR_ADDRESS')
 FINALIZATION_BATCH_MAX_REQUEST_COUNT = int(os.getenv('FINALIZATION_BATCH_MAX_REQUEST_COUNT', 1000))
 
 # We add some gas to the transaction to be sure that we have enough gas to execute corner cases
@@ -74,11 +74,11 @@ HEALTHCHECK_SERVER_PORT = int(os.getenv('HEALTHCHECK_SERVER_PORT', 9010))
 MAX_CYCLE_LIFETIME_IN_SECONDS = int(os.getenv("MAX_CYCLE_LIFETIME_IN_SECONDS", 3000))
 
 
-def check_all_required_variables():
-    errors = check_uri_required_variables()
-    if LIDO_LOCATOR_ADDRESS in (None, ''):
-        errors.append('LIDO_LOCATOR_ADDRESS')
-    return errors
+# def check_all_required_variables():
+#     errors = check_uri_required_variables()
+#     if LIDO_LOCATOR_ADDRESS in (None, ''):
+#         errors.append('LIDO_LOCATOR_ADDRESS')
+#     return errors
 
 
 def check_uri_required_variables():

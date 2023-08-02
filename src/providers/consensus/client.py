@@ -63,19 +63,17 @@ class ConsensusClient(HTTPProvider):
             raise KeyError from error
         
     def get_block_by_beacon_slot(self, slot: int, epochs_per_frame: int, slots_per_epoch: int):
-
-        data, _ = self._get(self.API_GET_BLOCK_DETAILS.format(slot))
-        # logging.info(f'Potentially get_block_by_beacon_slot: {data}')
         init_slot = slot
-        # 下一帧结束之前结束
-        # while data.code == 404:
-        #     logging.info(f'slot missed: {slot}, next slot {slot + 1}')
-        #     # 遍历到下一帧截止前
-        #     if slot < init_slot + epochs_per_frame * slots_per_epoch:
-        #         slot += 1
-        #         data, _ = self._get(self.API_GET_BLOCK_DETAILS.format(slot))
-        #     else:
-        #         raise BeaconBlockNotFoundError()
+        while True:
+            try:
+                data, _ = self._get(self.API_GET_BLOCK_DETAILS.format(slot))
+                break  # 如果成功获取区块信息，则跳出循环
+            except NotOkResponse as e:
+                logging.warning(f'Dawn get get_block_by_beacon_slot throw Exception: {e}, status: {e.status} ')
+                if e.status == 404 and slot < init_slot + epochs_per_frame * slots_per_epoch:
+                    slot += 1  # 增加 slot 的值
+                else:
+                    break  # 如果发生其他错误，也跳出循环
 
         try:
             return int(data['message']['body']['execution_payload']['block_number'])

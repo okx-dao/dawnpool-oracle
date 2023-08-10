@@ -220,6 +220,13 @@ class LidoContracts(Module):
         FRAME_PREV_REPORT_REF_SLOT.set(result)
         return result
 
+    @lru_cache(maxsize=1)
+    def get_accounting_last_processing_ref_epoch(self, blockstamp: BlockStamp) -> SlotNumber:
+        result = self.w3.lido_contracts.oracle.functions.getLastProcessingRefSlot().call(block_identifier=blockstamp.block_hash)
+        logger.info({'msg': f'Accounting last processing ref epoch {result}'})
+        FRAME_PREV_REPORT_REF_SLOT.set(result)
+        return result
+
     def get_ejector_last_processing_ref_epoch(self, blockstamp: BlockStamp) -> SlotNumber:
 
         result = self.w3.lido_contracts.validators_exit_bus_oracle.functions.getLastProcessingRefSlot().call(

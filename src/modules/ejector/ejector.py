@@ -104,8 +104,6 @@ class Ejector(BaseModule, ConsensusModule):
     @lru_cache(maxsize=1)
     @duration_meter()
     def build_report(self, blockstamp: ReferenceBlockStamp) -> tuple:
-        # last_report_ref_slot = self.w3.lido_contracts.get_ejector_last_processing_ref_slot(blockstamp)
-        # FRAME_PREV_REPORT_REF_SLOT.set(last_report_ref_slot)
         last_report_ref_epoch = self.w3.lido_contracts.get_ejector_last_processing_ref_epoch(blockstamp)
         FRAME_PREV_REPORT_REF_EPOCH.set(last_report_ref_epoch)
         logger.info({'msg': 'build_report last_report_ref_epoch', 'value': last_report_ref_epoch})
@@ -128,7 +126,7 @@ class Ejector(BaseModule, ConsensusModule):
 
     # 计算需要弹出的验证器 接受一个区块时间戳对象 blockstamp 作为输入参数，并返回一个列表，包含需要弹出的验证器的全局索引和 Validator 类型的对象组成的元组。
     def get_validators_to_eject(self, blockstamp: ReferenceBlockStamp) -> int:
-        # 所有未完成提现请求的总金额(需要退出的数量)，它将被用于计算可退出验证人的余额。 ToDo 调withdraw合约拿
+        # 所有未完成提现请求的总金额(需要退出的数量)，它将被用于计算可退出验证人的余额。  调withdraw合约拿
         to_withdraw_amount = self.w3.lido_contracts.withdraw.functions.getUnfulfilledTotalEth().call(block_identifier=blockstamp.block_hash)
         logger.info({'msg': 'Calculate to withdraw amount.', 'value': to_withdraw_amount})
 
@@ -137,14 +135,14 @@ class Ejector(BaseModule, ConsensusModule):
         # 如果 to_withdraw_amount 的值为 0，则表示没有未完成的提现请求需要处理，因此该函数直接返回0。
         if to_withdraw_amount == Wei(0):
             return 0
-        # 获取给定块的链配置对象 slotsPerEpoch：每个纪元中的 slot 数量(32)； secondsPerSlot：每个 slot 的时长（12秒）；genesisTime：链的创世时间（Unix 时间戳）todo 通过HashConsensus合约获取()
+        # 获取给定块的链配置对象 slotsPerEpoch：每个纪元中的 slot 数量(32)； secondsPerSlot：每个 slot 的时长（12秒）；genesisTime：链的创世时间（Unix 时间戳）
         #  chain_config = self.get_chain_config(blockstamp)
         chain_config = self.w3.lido_contracts.validators_exit_bus_oracle.functions.getChainConfig().call()
         logger.info({'msg': 'Fetch chain config.', 'value': chain_config})
-        # 每个 epoch 中，每个验证人可以获得多少奖励。 todo 通过上报事件平均值计算
+        # 每个 epoch 中，每个验证人可以获得多少奖励。 通过上报事件平均值计算
         rewards_speed_per_epoch = self.prediction_service.get_rewards_per_epoch(blockstamp, chain_config)
         logger.info({'msg': 'Calculate average rewards speed per epoch.', 'value': rewards_speed_per_epoch})
-        # 计算需要多少个 epoch 才能处理完链上所有需要进行提款的验证人 todo 查询链上数据获取 可以复用
+        # 计算需要多少个 epoch 才能处理完链上所有需要进行提款的验证人 查询链上数据获取 可以复用
         epochs_to_sweep = self._get_sweep_delay_in_epochs(blockstamp)
         # epochs_to_sweep = 104
         logger.info({'msg': 'Calculate epochs to sweep.', 'value': epochs_to_sweep})
@@ -163,7 +161,7 @@ class Ejector(BaseModule, ConsensusModule):
 
         # total_available_balance = self._get_total_el_balance(blockstamp)
         logger.info({'msg': 'Calculate el balance.', 'value': total_available_balance})
-        # 获取最近提交了退出请求但尚未退出的验证人列表 todo
+        # 获取最近提交了退出请求但尚未退出的验证人列表
         validators_going_to_exit = self.validators_state_service.get_recently_requested_but_not_exited_validators(blockstamp, chain_config)
         # 计算正在退出验证人的待提款ETH余额总和
         going_to_withdraw_balance = sum(map(
@@ -197,20 +195,20 @@ class Ejector(BaseModule, ConsensusModule):
         logger.info({'msg': 'dawn_pool_validators_list.', 'len': len(dawn_pool_validators_list), 'value': dawn_pool_validators_list})
 
         for validator in dawn_pool_validators_list:
-            # 获取待提款的的可提现时期，以便确定在何时可以提取这些代币  提款请求队列中的已退出验证人数量加上正在退出验证人数量再加上1 todo 可以复用 跑数据验证下
+            # 获取待提款的的可提现时期，以便确定在何时可以提取这些代币  提款请求队列中的已退出验证人数量加上正在退出验证人数量再加上1  可以复用
             withdrawal_epoch = self._get_predicted_withdrawable_epoch(blockstamp, eject_count + len(validators_going_to_exit) + 1)
             logger.info({'msg': 'withdrawal_epoch.', 'value': withdrawal_epoch})
             # 计算即将退出的验证人可以获得的未来奖励数量  从当前 Epoch 开始，到待提款的 EL 代币可以提现的 Epoch 结束，再加上扫描的 Epoch 数量，共有多少个 Epoch. blockstamp.ref_epoch 返回指定时间戳所在的引用时期编号
             # 然后将这个 Epoch 数量乘以每个 Epoch 的奖励速度，即可得到该验证人在未来可以获得的奖励数量
             future_rewards = (withdrawal_epoch + epochs_to_sweep - blockstamp.ref_epoch) * rewards_speed_per_epoch
             logger.info({'msg': 'future_rewards.', 'value': future_rewards})
-            # 验证者退出之前所有验证者的"全部提款"的总额  （指定时间戳和提款时期的可提取 验证者余额） todo
+            # 验证者退出之前所有验证者的"全部提款"的总额  （指定时间戳和提款时期的可提取 验证者余额）
             future_withdrawals = self._get_withdrawable_lido_validators_balance(blockstamp, withdrawal_epoch)
             logger.info({'msg': 'future_withdrawals.', 'value': future_withdrawals})
             # 计算当前的预期总余额
             expected_balance = (
                 future_withdrawals +  # Validators that have withdrawal_epoch 指定时间戳和提款时期的可提取 验证者余额
-                future_rewards +  # Rewards we get until last validator in validators_to_eject will be withdrawn todo 验证人在未来可以获得的奖励数量
+                future_rewards +  # Rewards we get until last validator in validators_to_eject will be withdrawn  验证人在未来可以获得的奖励数量
                 total_available_balance +  # Current EL balance (el vault, wc vault, buffered eth) 当前可用的ETH总余额
                 validator_to_eject_balance_sum +  # Validators that we expected to be ejected (requested to exit, not delayed) 已请求退出但仍在延迟期内的验证人节点持有的ETH总余额之和
                 going_to_withdraw_balance  # validators_to_eject balance 已被排队等待退出的验证人节点持有的 ETH
@@ -239,7 +237,7 @@ class Ejector(BaseModule, ConsensusModule):
             # 将可以退出的验证人节点添加到validators_to_eject列表中  该元组包含了需要退出的验证人节点在验证人列表中的索引和验证人节点本身。
             # validators_to_eject.append(validator_container)
             # (_, validator) = validator_container
-            # 更新已请求退出但仍在延迟期内的验证人节点持有的 EL 代币数量之和 todo 查询有效余额 取有效余额和32的最小值
+            # 更新已请求退出但仍在延迟期内的验证人节点持有的 EL 代币数量之和  查询有效余额 取有效余额和32的最小值
             # validator_to_eject_balance_sum += MAX_EFFECTIVE_BALANCE
             validator_to_eject_balance_sum += self._get_predicted_withdrawable_balance(validator)
             logger.info({'msg': 'validator_to_eject_balance_sum.', 'value': validator_to_eject_balance_sum})
